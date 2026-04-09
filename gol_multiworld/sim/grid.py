@@ -47,7 +47,6 @@ class Grid:
         self,
         rules: dict[str, Any],
         seed: int | None = None,
-        wall_density: float = 0.05,
         toxic_density: float = 0.02,
         live_density: float = 0.15,
     ) -> None:
@@ -59,8 +58,6 @@ class Grid:
             Loaded rules dict (used for foodScarcity).
         seed:
             Optional RNG seed for deterministic runs.
-        wall_density:
-            Fraction of cells that become walls.
         toxic_density:
             Fraction of cells that become toxic.
         live_density:
@@ -71,14 +68,14 @@ class Grid:
 
         for y in range(self.height):
             for x in range(self.width):
+                if self._cells[y][x] == CellType.WALL:
+                    continue
                 r = rng.random()
-                if r < wall_density:
-                    self._cells[y][x] = CellType.WALL
-                elif r < wall_density + toxic_density:
+                if r < toxic_density:
                     self._cells[y][x] = CellType.TOXIC
-                elif r < wall_density + toxic_density + food_density:
+                elif r < toxic_density + food_density:
                     self._cells[y][x] = CellType.FOOD
-                elif r < wall_density + toxic_density + food_density + live_density:
+                elif r < toxic_density + food_density + live_density:
                     self._cells[y][x] = CellType.LIVE
                 else:
                     self._cells[y][x] = CellType.EMPTY

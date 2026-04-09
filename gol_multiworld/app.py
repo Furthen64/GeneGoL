@@ -15,6 +15,7 @@ from gol_multiworld.sim.d3_controller import d3_tick
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import Organism, detect_organisms
 from gol_multiworld.sim.rules_engine import load_rules
+from gol_multiworld.sim.wall_generator import generate_walls
 from gol_multiworld.ui.controls import Controls
 from gol_multiworld.ui.overlays import draw_grid_lines, draw_key_help
 from gol_multiworld.ui.renderer import Renderer
@@ -65,9 +66,11 @@ class App:
 
         self.rules: dict[str, Any] = load_rules(rules_path)
         self.rng = random.Random(seed)
+        world_seed = seed if seed is not None else self.rng.randint(0, 2**31)
 
         self.grid = Grid(self.grid_w, self.grid_h)
-        self.grid.randomize(self.rules, seed=seed)
+        generate_walls(self.grid, self.rules, random.Random(world_seed))
+        self.grid.randomize(self.rules, seed=world_seed)
 
         self.organisms: list[Organism] = []
         self.tick: int = 0
@@ -228,4 +231,5 @@ class App:
         self.organisms = []
         new_seed = self.rng.randint(0, 2**31)
         self.grid = Grid(self.grid_w, self.grid_h)
+        generate_walls(self.grid, self.rules, random.Random(new_seed))
         self.grid.randomize(self.rules, seed=new_seed)

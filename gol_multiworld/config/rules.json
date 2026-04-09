@@ -25,5 +25,16 @@
   "wallCell": {
     "static": true,
     "blocksVisibilityCompletely": true
+  },
+  "wallGeneration": {
+    "mode": "structured",
+    "minRoomSize": 6,
+    "targetRoomSize": 10,
+    "roomSizeJitter": 3,
+    "dividerThickness": 1,
+    "dividerGapSize": 2,
+    "organicJitter": 1,
+    "maxDepth": 6,
+    "legacyWallDensity": 0.05
   }
 }
