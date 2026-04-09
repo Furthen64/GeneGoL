@@ -10,7 +10,6 @@ from typing import Any
 import pygame
 
 from gol_multiworld.sim.cell_types import CellType
-from gol_multiworld.sim.coordinator import coordinator_tick
 from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
 from gol_multiworld.sim.debug_trace import BirthCauseTracer
@@ -263,16 +262,6 @@ class App:
 
         # 3 & 4 & 5. D3 food, toxic, steering
         self.grid = d3_tick(
-            self.grid,
-            self.organisms,
-            self.tick,
-            self.rules,
-            self.rng,
-            self.debugger,
-        )
-
-        # D1 coordinator: spawn if needed
-        coordinator_tick(
             self.grid,
             self.organisms,
             self.tick,

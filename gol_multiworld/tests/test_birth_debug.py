@@ -6,7 +6,6 @@ import copy
 import random
 
 from gol_multiworld.sim.cell_types import CellType
-from gol_multiworld.sim.coordinator import coordinator_tick
 from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
 from gol_multiworld.sim.debug_trace import (
@@ -111,27 +110,6 @@ def test_unknown_live_cell_is_reported() -> None:
 
     assert tracer.violation_count == 1
     assert "without recorded cause" in tracer.violations[0]
-
-
-def test_new_organism_logs_prior_tick_spawn_origin_for_preexisting_cells() -> None:
-    grid = Grid(10, 10)
-    rules = _rules(coordinatorSpawnThreshold=1)
-    tracer = BirthCauseTracer(enabled=True)
-
-    tracer.begin_tick(0, grid)
-    coordinator_tick(grid, [], tick=0, rules=rules, rng=random.Random(0), debugger=tracer)
-    tracer.finalize_tick(grid)
-
-    tracer.begin_tick(1, grid)
-    organisms = detect_organisms(grid, tick=1, previous=[], rules=rules, debugger=tracer)
-
-    assert len(organisms) == 1
-    appearance = tracer.organism_appearances[0]
-    for cell in appearance.cells:
-        assert cell.source == "pre-existing live cells"
-        assert cell.cause == "spawn"
-        assert cell.origin_tick == 0
-        assert cell.origin_phase == "spawn"
 
 
 def test_d3_write_limit_violation_is_reported() -> None:
