@@ -6,6 +6,7 @@ import random
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
+from gol_multiworld.sim.debug_trace import BirthCauseTracer, D2_BIRTH
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.visibility import count_visible_live_neighbors
 
@@ -14,6 +15,7 @@ def d2_update(
     grid: Grid,
     rules: dict[str, Any],
     rng: random.Random | None = None,
+    debugger: BirthCauseTracer | None = None,
 ) -> Grid:
     """Advance the grid by one D2 tick using double-buffering.
 
@@ -58,6 +60,16 @@ def d2_update(
 
             if cell == CellType.FOOD:
                 if rng.random() < food_spoil_chance:
+                    if debugger is not None:
+                        debugger.record_transition(
+                            grid,
+                            x,
+                            y,
+                            cell,
+                            CellType.TOXIC,
+                            cause="food_spoil",
+                            phase="D2",
+                        )
                     next_grid.set(x, y, CellType.TOXIC)
                 continue
 
@@ -65,9 +77,29 @@ def d2_update(
 
             if cell == CellType.LIVE:
                 if live_count not in survive_set:
+                    if debugger is not None:
+                        debugger.record_transition(
+                            grid,
+                            x,
+                            y,
+                            cell,
+                            CellType.EMPTY,
+                            cause="D2_death",
+                            phase="D2",
+                        )
                     next_grid.set(x, y, CellType.EMPTY)
             elif cell == CellType.EMPTY:
                 if live_count in born_set:
+                    if debugger is not None:
+                        debugger.record_transition(
+                            grid,
+                            x,
+                            y,
+                            cell,
+                            CellType.LIVE,
+                            cause=D2_BIRTH,
+                            phase="D2",
+                        )
                     next_grid.set(x, y, CellType.LIVE)
 
     return next_grid

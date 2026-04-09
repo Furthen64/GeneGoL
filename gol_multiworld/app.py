@@ -13,6 +13,7 @@ from gol_multiworld.sim.cell_types import CellType
 from gol_multiworld.sim.coordinator import coordinator_tick
 from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
+from gol_multiworld.sim.debug_trace import BirthCauseTracer
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import (
     Organism,
@@ -22,6 +23,7 @@ from gol_multiworld.sim.organism_detection import (
 from gol_multiworld.sim.rules_engine import load_rules
 from gol_multiworld.sim.wall_generator import generate_walls
 from gol_multiworld.ui.controls import Controls
+from gol_multiworld.ui.gif_recorder import GifRecorder, MAX_RECORD_SECONDS
 from gol_multiworld.ui.overlays import draw_grid_lines, draw_key_help
 from gol_multiworld.ui.renderer import Renderer
 
@@ -37,6 +39,7 @@ DEFAULT_RULES_PATH = Path(__file__).parent / "config" / "rules.json"
 DEFAULT_FPS = 10
 MIN_FPS = 1
 MAX_FPS = 60
+GIF_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "gifs"
 RANDOM_SEED: int | None = None   # Set to an int for deterministic runs
 
 
@@ -53,6 +56,8 @@ class App:
         seed: int | None = RANDOM_SEED,
         fps: int = DEFAULT_FPS,
         cell_size: int = CELL_SIZE,
+        birth_debug: bool = False,
+        birth_debug_strict: bool = False,
     ) -> None:
         self.rules_path = rules_path
         self.seed = seed
@@ -70,6 +75,11 @@ class App:
         self.font = pygame.font.SysFont("monospace", 12)
 
         self.rules: dict[str, Any] = load_rules(rules_path)
+        self.debugger = BirthCauseTracer.from_settings(
+            self.rules,
+            enabled=birth_debug,
+            strict=birth_debug_strict,
+        )
         self.rng = random.Random(seed)
         world_seed = seed if seed is not None else self.rng.randint(0, 2**31)
 
@@ -90,6 +100,8 @@ class App:
             grid_offset_y=0,
         )
         self.controls = Controls()
+        self.recorder = GifRecorder(GIF_OUTPUT_DIR)
+        self.recording_notice: str | None = None
 
     # ------------------------------------------------------------------
     # Main loop
@@ -116,6 +128,10 @@ class App:
                     self.fps = min(MAX_FPS, self.fps + 1)
                 if self.controls.speed_down:
                     self.fps = max(MIN_FPS, self.fps - 1)
+                if self.controls.start_recording:
+                    self._start_recording()
+                if self.controls.stop_recording:
+                    self._stop_recording()
 
                 # Advance simulation
                 if not self.controls.paused or self.controls.step_once:
@@ -144,6 +160,7 @@ class App:
                     self.tick,
                     self.organisms,
                     self.controls.paused,
+                    extra_lines=self._status_lines(),
                     panel_x=panel_x,
                     panel_y=0,
                 )
@@ -159,8 +176,18 @@ class App:
 
                 pygame.display.flip()
 
+                if self.recorder.is_recording:
+                    self.recorder.capture_frame(
+                        self.screen,
+                        duration_ms=max(20, round(1000 / self.fps)),
+                    )
+                    if self.recorder.should_auto_stop():
+                        self._stop_recording()
+
                 self.clock.tick(self.fps)
         finally:
+            if self.recorder.is_recording:
+                self._stop_recording()
             pygame.quit()
 
     def _draw_legend_panel(self, panel_x: int, panel_y: int) -> None:
@@ -196,18 +223,33 @@ class App:
             text = font.render(label, True, (200, 230, 200))
             self.screen.blit(text, (panel_x + 32, y))
 
+    def _status_lines(self) -> list[str]:
+        """Build extra status text for the debug panel."""
+        lines = [f"FPS: {self.fps}"]
+        if self.debugger.enabled:
+            lines.append(f"BirthDebug: on ({self.debugger.violation_count} errs)")
+        if self.recorder.is_recording:
+            lines.append(
+                f"REC: {self.recorder.elapsed_seconds():.1f}/{MAX_RECORD_SECONDS:.0f}s"
+            )
+        elif self.recording_notice:
+            lines.append(self.recording_notice)
+        return lines
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
     def _advance(self) -> None:
         """Run one full simulation tick."""
+        self.debugger.begin_tick(self.tick, self.grid)
+
         # 1. D2 update
-        self.grid = d2_update(self.grid, self.rules, self.rng)
+        self.grid = d2_update(self.grid, self.rules, self.rng, self.debugger)
 
         # 2. D3 detect organisms
         self.organisms = detect_organisms(
-            self.grid, self.tick, self.organisms, self.rules
+            self.grid, self.tick, self.organisms, self.rules, self.debugger
         )
         self.organisms = cull_stagnating_organisms(
             self.grid, self.organisms, self.rules
@@ -215,13 +257,25 @@ class App:
 
         # 3 & 4 & 5. D3 food, toxic, steering
         self.grid = d3_tick(
-            self.grid, self.organisms, self.tick, self.rules, self.rng
+            self.grid,
+            self.organisms,
+            self.tick,
+            self.rules,
+            self.rng,
+            self.debugger,
         )
 
         # D1 coordinator: spawn if needed
         coordinator_tick(
-            self.grid, self.organisms, self.tick, self.rules, self.rng
+            self.grid,
+            self.organisms,
+            self.tick,
+            self.rules,
+            self.rng,
+            self.debugger,
         )
+
+        self.debugger.finalize_tick(self.grid)
 
         self.tick += 1
 
@@ -231,6 +285,11 @@ class App:
         from gol_multiworld.sim.rules_engine import RulesValidationError
         try:
             self.rules = load_rules(self.rules_path)
+            self.debugger = BirthCauseTracer.from_settings(
+                self.rules,
+                enabled=self.debugger.enabled,
+                strict=self.debugger.strict,
+            )
         except FileNotFoundError as exc:
             print(f"[rules reload] File not found: {exc}", file=sys.stderr)
         except json.JSONDecodeError as exc:
@@ -247,6 +306,26 @@ class App:
         self.grid = Grid(self.grid_w, self.grid_h)
         generate_walls(self.grid, self.rules, random.Random(new_seed))
         self.grid.randomize(self.rules, seed=new_seed)
+
+    def _start_recording(self) -> None:
+        """Begin capturing frames for GIF export."""
+        try:
+            self.recorder.start()
+        except RuntimeError as exc:
+            self.recording_notice = str(exc)
+            return
+
+        self.recording_notice = "REC: saving on stop"
+
+    def _stop_recording(self) -> None:
+        """Stop capturing frames and write the GIF to disk."""
+        output_path = self.recorder.stop()
+        if output_path is None:
+            self.recording_notice = "REC: no frames captured"
+            return
+
+        self.recording_notice = f"Saved: {output_path.name}"
+        print(f"[gif] Saved recording to {output_path}")
 
     def _delete_walls_stage(self) -> None:
         """Delete walls in three presses: 50%, 75%, then all."""

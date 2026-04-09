@@ -8,6 +8,7 @@ import math
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
+from gol_multiworld.sim.debug_trace import BirthCauseTracer
 from gol_multiworld.sim.genes import Gene
 from gol_multiworld.sim.grid import Grid
 
@@ -70,6 +71,7 @@ def detect_organisms(
     tick: int,
     previous: list[Organism],
     rules: dict[str, Any],
+    debugger: BirthCauseTracer | None = None,
 ) -> list[Organism]:
     """Detect all organisms in the current grid.
 
@@ -162,19 +164,20 @@ def detect_organisms(
             recent_signatures = [cluster_signature]
 
         used_ids.add(oid)
-        result.append(
-            Organism(
-                organism_id=oid,
-                cells=cluster,
-                birth_tick=birth,
-                last_seen_tick=tick,
-                gene=gene,
-                bad_zones=bad_zones,
-                last_centroid=cluster_centroid,
-                travel_distance=travel_distance,
-                recent_signatures=recent_signatures,
-            )
+        organism = Organism(
+            organism_id=oid,
+            cells=cluster,
+            birth_tick=birth,
+            last_seen_tick=tick,
+            gene=gene,
+            bad_zones=bad_zones,
+            last_centroid=cluster_centroid,
+            travel_distance=travel_distance,
+            recent_signatures=recent_signatures,
         )
+        result.append(organism)
+        if matched_org is None and debugger is not None:
+            debugger.record_new_organism(organism)
 
     return result
 

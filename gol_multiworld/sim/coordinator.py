@@ -6,6 +6,7 @@ import random
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
+from gol_multiworld.sim.debug_trace import BirthCauseTracer, SPAWN
 from gol_multiworld.sim.genes import Gene
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import Organism
@@ -24,6 +25,7 @@ def coordinator_tick(
     tick: int,
     rules: dict[str, Any],
     rng: random.Random | None = None,
+    debugger: BirthCauseTracer | None = None,
 ) -> None:
     """Spawn new live-cell clumps if organism count is critically low.
 
@@ -57,7 +59,7 @@ def coordinator_tick(
         x = rng.randint(1, grid.width - _CLUMP_SIZE - 2)
         y = rng.randint(1, grid.height - _CLUMP_SIZE - 2)
         if _area_free(grid, x, y, _CLUMP_SIZE):
-            _plant_clump(grid, x, y, _CLUMP_SIZE)
+            _plant_clump(grid, x, y, _CLUMP_SIZE, debugger)
             break
 
 
@@ -69,7 +71,23 @@ def _area_free(grid: Grid, x: int, y: int, size: int) -> bool:
     return True
 
 
-def _plant_clump(grid: Grid, x: int, y: int, size: int) -> None:
+def _plant_clump(
+    grid: Grid,
+    x: int,
+    y: int,
+    size: int,
+    debugger: BirthCauseTracer | None = None,
+) -> None:
     for dy in range(size):
         for dx in range(size):
+            if debugger is not None:
+                debugger.record_transition(
+                    grid,
+                    x + dx,
+                    y + dy,
+                    CellType.EMPTY,
+                    CellType.LIVE,
+                    cause=SPAWN,
+                    phase="spawn",
+                )
             grid.set(x + dx, y + dy, CellType.LIVE)

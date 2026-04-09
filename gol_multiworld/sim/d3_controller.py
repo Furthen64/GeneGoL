@@ -6,6 +6,12 @@ import random
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
+from gol_multiworld.sim.debug_trace import (
+    BirthCauseTracer,
+    D3_FOOD_CONVERSION,
+    D3_GUIDED_GROWTH,
+    is_adjacent_to_organism_boundary,
+)
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import Organism
 
@@ -32,6 +38,7 @@ def d3_tick(
     tick: int,
     rules: dict[str, Any],
     rng: random.Random | None = None,
+    debugger: BirthCauseTracer | None = None,
 ) -> Grid:
     """Run the D3 pass for one tick.
 
@@ -64,15 +71,24 @@ def d3_tick(
     tox_memory_ticks: int = int(rules.get("toxicMemoryTicks", 30))
     d3_weight: float = float(rules.get("d3GuidanceWeight", 0.30))
     min_size: int = int(rules.get("minimumOrganismSize", 4))
+    explicit_max_writes = rules.get("d3MaxWritesPerOrganismPerTick")
 
     for org in organisms:
         if org.size < min_size:
             continue  # tiny clusters get no D3
 
-        _handle_food(grid, org)
+        food_writes = _handle_food(grid, org, debugger)
         _handle_toxic(grid, org, tick, tox_memory_ticks)
         _decay_bad_zones(org, tick)
-        _apply_steering(grid, org, tick, d3_weight, rng, rules)
+        guided_write = _apply_steering(grid, org, tick, d3_weight, rng, rules, debugger)
+        if debugger is not None:
+            allowed_writes = len(food_writes) + 1
+            if explicit_max_writes is not None:
+                allowed_writes = min(allowed_writes, int(explicit_max_writes))
+            debugger.set_d3_write_limit(org.organism_id, allowed_writes)
+
+    if debugger is not None:
+        debugger.check_d3_write_limits()
 
     return grid
 
@@ -81,16 +97,35 @@ def d3_tick(
 # Food handling
 # ---------------------------------------------------------------------------
 
-def _handle_food(grid: Grid, org: Organism) -> None:
+def _handle_food(
+    grid: Grid,
+    org: Organism,
+    debugger: BirthCauseTracer | None = None,
+) -> set[tuple[int, int]]:
     """Convert food cells adjacent to organism cells into Live cells."""
     new_live: set[tuple[int, int]] = set()
     for cx, cy in list(org.cells):
         for dx, dy in _NEIGHBOR_OFFSETS:
             nx, ny = cx + dx, cy + dy
             if grid.get(nx, ny) == CellType.FOOD:
+                if debugger is not None:
+                    debugger.record_transition(
+                        grid,
+                        nx,
+                        ny,
+                        CellType.FOOD,
+                        CellType.LIVE,
+                        cause=D3_FOOD_CONVERSION,
+                        phase="D3",
+                        source_organism_id=org.organism_id,
+                        near_organism_boundary=is_adjacent_to_organism_boundary(
+                            org.cells, (nx, ny)
+                        ),
+                    )
                 grid.set(nx, ny, CellType.LIVE)
                 new_live.add((nx, ny))
     org.cells.update(new_live)
+    return new_live
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +161,8 @@ def _apply_steering(
     d3_weight: float,
     rng: random.Random,
     rules: dict[str, Any],
-) -> None:
+    debugger: BirthCauseTracer | None = None,
+) -> tuple[int, int] | None:
     """Gently bias the organism's growth direction.
 
     D3 may only bias candidate boundary-cell births — it does not
@@ -135,37 +171,54 @@ def _apply_steering(
     highest-scoring candidate is activated as Live.
     """
     if not org.cells:
-        return
+        return None
 
     # Collect empty boundary positions (adjacent to organism, not already Live)
-    candidates: list[tuple[int, int]] = []
+    candidates: set[tuple[int, int]] = set()
     for cx, cy in org.cells:
         for dx, dy in _NEIGHBOR_OFFSETS:
             nx, ny = cx + dx, cy + dy
             if grid.get(nx, ny) == CellType.EMPTY:
-                candidates.append((nx, ny))
+                candidates.add((nx, ny))
 
     if not candidates:
-        return
+        return None
 
     # Only act with probability d3_weight (keep D2 dominant)
     if rng.random() > d3_weight:
-        return
+        return None
 
     # Score each candidate
     food_positions = _nearby_food(grid, org)
     scored = [
         (_score_candidate(nx, ny, org, food_positions, grid), (nx, ny))
-        for (nx, ny) in candidates
+        for (nx, ny) in sorted(candidates, key=lambda pos: (pos[1], pos[0]))
     ]
-    scored.sort(key=lambda t: t[0], reverse=True)
+    scored.sort(key=lambda item: (-item[0], item[1][1], item[1][0]))
     best_score, best_pos = scored[0]
 
     # Only apply if the best score is actually positive (beneficial direction)
     if best_score > 0:
         bx, by = best_pos
+        if debugger is not None:
+            debugger.record_transition(
+                grid,
+                bx,
+                by,
+                CellType.EMPTY,
+                CellType.LIVE,
+                cause=D3_GUIDED_GROWTH,
+                phase="D3",
+                source_organism_id=org.organism_id,
+                near_organism_boundary=is_adjacent_to_organism_boundary(
+                    org.cells, best_pos
+                ),
+            )
         grid.set(bx, by, CellType.LIVE)
         org.cells.add(best_pos)
+        return best_pos
+
+    return None
 
 
 def _score_candidate(

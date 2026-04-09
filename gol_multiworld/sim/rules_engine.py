@@ -89,6 +89,18 @@ def _validate_rules(rules: dict[str, Any]) -> None:
             f"toxicMemoryTicks must be a non-negative integer, got {tox_mem!r}"
         )
 
+    d3_max_writes = rules.get("d3MaxWritesPerOrganismPerTick")
+    if d3_max_writes is not None:
+        if not isinstance(d3_max_writes, int) or d3_max_writes < 0:
+            raise RulesValidationError(
+                "d3MaxWritesPerOrganismPerTick must be a non-negative integer "
+                f"if provided, got {d3_max_writes!r}"
+            )
+
+    for key in ["birthCauseDebug", "birthCauseDebugStrict"]:
+        if key in rules and not isinstance(rules[key], bool):
+            raise RulesValidationError(f"{key} must be a boolean if provided")
+
     # liveCell / emptyCell neighbor lists
     live_cell: dict[str, Any] = rules["liveCell"]
     if "surviveIfVisibleLiveNeighborsIn" not in live_cell:

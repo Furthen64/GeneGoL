@@ -38,6 +38,16 @@ def main() -> None:
         dest="cell_size",
         help="Pixel size of each grid cell",
     )
+    parser.add_argument(
+        "--birth-debug",
+        action="store_true",
+        help="Log every new live cell and enforce birth-cause invariants",
+    )
+    parser.add_argument(
+        "--birth-debug-strict",
+        action="store_true",
+        help="Raise on birth-cause invariant failures instead of only logging them",
+    )
     args = parser.parse_args()
 
     app = App(
@@ -45,6 +55,8 @@ def main() -> None:
         seed=args.seed,
         fps=args.fps,
         cell_size=args.cell_size,
+        birth_debug=args.birth_debug,
+        birth_debug_strict=args.birth_debug_strict,
     )
     app.run()
 

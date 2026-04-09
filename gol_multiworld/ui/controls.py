@@ -30,6 +30,10 @@ class Controls:
         Toggle organism direction-vector overlay.
     delete_walls : bool
         Trigger staged wall deletion.
+    start_recording : bool
+        Begin GIF recording.
+    stop_recording : bool
+        End GIF recording and save the result.
     """
 
     def __init__(self) -> None:
@@ -43,6 +47,8 @@ class Controls:
         self.toggle_ids: bool = False
         self.toggle_vectors: bool = False
         self.delete_walls: bool = False
+        self.start_recording: bool = False
+        self.stop_recording: bool = False
 
     def process_events(self) -> None:
         """Poll all pending pygame events and update state flags."""
@@ -55,6 +61,8 @@ class Controls:
         self.toggle_ids = False
         self.toggle_vectors = False
         self.delete_walls = False
+        self.start_recording = False
+        self.stop_recording = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -91,6 +99,12 @@ class Controls:
                 elif key == pygame.K_w:
                     self.delete_walls = True
 
+                elif key == pygame.K_j:
+                    self.start_recording = True
+
+                elif key == pygame.K_k:
+                    self.stop_recording = True
+
                 elif key == pygame.K_ESCAPE or key == pygame.K_q:
                     self.quit = True
 
@@ -103,6 +117,8 @@ class Controls:
             "[L] reload rules",
             "[+/-] speed",
             "[W] delete walls 50/75/100%",
+            "[J] start GIF",
+            "[K] stop GIF",
             "[I] toggle IDs",
             "[V] toggle vectors",
             "[Q/ESC] quit",
