@@ -136,7 +136,7 @@ class App:
                     panel_y=0,
                 )
                 # Draw legend panel below status, above key help
-                self._draw_legend_panel(panel_x=panel_x, panel_y=120)
+                self._draw_legend_panel(panel_x=panel_x, panel_y=340)
                 draw_key_help(
                     self.screen,
                     self.font,
