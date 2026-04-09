@@ -81,3 +81,21 @@ def test_legacy_random_mode_keeps_random_scatter() -> None:
     )
     assert interior_walls > 0
     assert interior_walls < (grid.width - 2) * (grid.height - 2)
+
+
+def test_none_mode_leaves_grid_without_walls() -> None:
+    grid = Grid(20, 20)
+    rules = {
+        "foodScarcity": 0.02,
+        "wallGeneration": {
+            "mode": "none",
+        },
+    }
+
+    generate_walls(grid, rules, random.Random(11))
+
+    assert all(
+        grid.get(x, y) != CellType.WALL
+        for y in range(grid.height)
+        for x in range(grid.width)
+    )

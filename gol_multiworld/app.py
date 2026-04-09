@@ -88,6 +88,7 @@ class App:
         self.grid.randomize(self.rules, seed=world_seed)
 
         self.organisms: list[Organism] = []
+        self.organism_id_state: dict[str, int] = {"next_organism_id": 1}
         self.tick: int = 0
         self.show_ids: bool = True
         self.show_vectors: bool = False
@@ -249,7 +250,12 @@ class App:
 
         # 2. D3 detect organisms
         self.organisms = detect_organisms(
-            self.grid, self.tick, self.organisms, self.rules, self.debugger
+            self.grid,
+            self.tick,
+            self.organisms,
+            self.rules,
+            self.debugger,
+            self.organism_id_state,
         )
         self.organisms = cull_stagnating_organisms(
             self.grid, self.organisms, self.rules
@@ -301,6 +307,7 @@ class App:
         """Reset the grid and organisms to a new random state."""
         self.tick = 0
         self.organisms = []
+        self.organism_id_state = {"next_organism_id": 1}
         self.wall_delete_stage = 0
         new_seed = self.rng.randint(0, 2**31)
         self.grid = Grid(self.grid_w, self.grid_h)

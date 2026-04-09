@@ -54,6 +54,8 @@ class OrganismAppearanceCellRecord:
     position: tuple[int, int]
     source: str
     cause: str | None = None
+    origin_tick: int | None = None
+    origin_phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class BirthCauseTracer:
     stream: TextIO = field(default_factory=lambda: sys.stderr)
     current_tick: int | None = None
     previous_live_cells: set[tuple[int, int]] = field(default_factory=set)
+    live_origins: dict[tuple[int, int], StateChangeRecord] = field(default_factory=dict)
     state_changes: dict[tuple[int, int], list[StateChangeRecord]] = field(
         default_factory=lambda: defaultdict(list)
     )
@@ -155,6 +158,8 @@ class BirthCauseTracer:
         prior_changes.append(record)
 
         if new_state != CellType.LIVE:
+            if previous_state == CellType.LIVE:
+                self.live_origins.pop(pos, None)
             return
 
         if cause not in _VALID_BIRTH_CAUSES:
@@ -169,6 +174,7 @@ class BirthCauseTracer:
             )
 
         self.live_births[pos] = record
+        self.live_origins[pos] = record
         self._log_birth(record)
 
         if cause == UNKNOWN:
@@ -231,10 +237,14 @@ class BirthCauseTracer:
                 continue
 
             if pos in self.previous_live_cells:
+                prior_origin = self.live_origins.get(pos)
                 cell_records.append(
                     OrganismAppearanceCellRecord(
                         position=pos,
                         source="pre-existing live cells",
+                        cause=None if prior_origin is None else prior_origin.cause,
+                        origin_tick=None if prior_origin is None else prior_origin.tick,
+                        origin_phase=None if prior_origin is None else prior_origin.phase,
                     )
                 )
                 explainable_cells.add(pos)
@@ -297,7 +307,13 @@ class BirthCauseTracer:
 
     def _log_organism_appearance(self, appearance: OrganismAppearanceRecord) -> None:
         parts = [
-            f"{cell.position}:{cell.source}" + (f"/{cell.cause}" if cell.cause else "")
+            f"{cell.position}:{cell.source}"
+            + (f"/{cell.cause}" if cell.cause else "")
+            + (
+                f"@{cell.origin_tick}:{cell.origin_phase}"
+                if cell.origin_tick is not None and cell.origin_phase is not None
+                else ""
+            )
             for cell in appearance.cells
         ]
         self._log(

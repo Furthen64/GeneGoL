@@ -216,3 +216,38 @@ def test_new_organism_gets_new_id() -> None:
     ids0 = {o.organism_id for o in orgs0}
     ids1 = {o.organism_id for o in orgs1}
     assert ids0.isdisjoint(ids1), "New organism should have a fresh ID"
+
+
+def test_retired_organism_id_is_not_reused_when_allocator_state_is_kept() -> None:
+    id_state = {"next_organism_id": 1}
+
+    grid_a = _grid_with_cluster([(1, 1), (1, 2), (2, 1), (2, 2)])
+    orgs0 = detect_organisms(
+        grid_a,
+        tick=0,
+        previous=[],
+        rules=RULES,
+        id_state=id_state,
+    )
+    first_id = orgs0[0].organism_id
+
+    empty_grid = Grid(20, 20)
+    orgs1 = detect_organisms(
+        empty_grid,
+        tick=1,
+        previous=orgs0,
+        rules=RULES,
+        id_state=id_state,
+    )
+    assert orgs1 == []
+
+    grid_b = _grid_with_cluster([(10, 10), (10, 11), (11, 10), (11, 11)])
+    orgs2 = detect_organisms(
+        grid_b,
+        tick=2,
+        previous=orgs1,
+        rules=RULES,
+        id_state=id_state,
+    )
+
+    assert orgs2[0].organism_id != first_id

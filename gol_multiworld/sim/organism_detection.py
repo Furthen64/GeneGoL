@@ -72,6 +72,7 @@ def detect_organisms(
     previous: list[Organism],
     rules: dict[str, Any],
     debugger: BirthCauseTracer | None = None,
+    id_state: dict[str, int] | None = None,
 ) -> list[Organism]:
     """Detect all organisms in the current grid.
 
@@ -121,7 +122,7 @@ def detect_organisms(
 
     # Assign IDs: reuse old ID if majority of cells overlap with a prior organism
     used_ids: set[int] = set()
-    next_id: int = _next_free_id(previous)
+    next_id: int = _next_free_id(previous, id_state)
     result: list[Organism] = []
 
     for cluster in clusters:
@@ -179,6 +180,9 @@ def detect_organisms(
         if matched_org is None and debugger is not None:
             debugger.record_new_organism(organism)
 
+    if id_state is not None:
+        id_state["next_organism_id"] = next_id
+
     return result
 
 
@@ -227,7 +231,15 @@ def _bfs(
     return cluster
 
 
-def _next_free_id(previous: list[Organism]) -> int:
+def _next_free_id(
+    previous: list[Organism],
+    id_state: dict[str, int] | None = None,
+) -> int:
+    if id_state is not None:
+        next_id = id_state.get("next_organism_id")
+        if next_id is not None:
+            return next_id
+
     if not previous:
         return 1
     return max(o.organism_id for o in previous) + 1

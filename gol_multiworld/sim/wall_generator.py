@@ -36,6 +36,9 @@ def generate_walls(grid: Grid, rules: dict[str, Any], rng: random.Random) -> Non
     grid.clear()
 
     mode = str(config.get("mode", "structured"))
+    if mode == "none":
+        return
+
     if mode == "legacy_random":
         _generate_legacy_random_walls(grid, rng, config)
         return
