@@ -28,6 +28,8 @@ class Controls:
         Toggle organism ID overlay.
     toggle_vectors : bool
         Toggle organism direction-vector overlay.
+    delete_walls : bool
+        Trigger staged wall deletion.
     """
 
     def __init__(self) -> None:
@@ -40,6 +42,7 @@ class Controls:
         self.speed_down: bool = False
         self.toggle_ids: bool = False
         self.toggle_vectors: bool = False
+        self.delete_walls: bool = False
 
     def process_events(self) -> None:
         """Poll all pending pygame events and update state flags."""
@@ -51,6 +54,7 @@ class Controls:
         self.speed_down = False
         self.toggle_ids = False
         self.toggle_vectors = False
+        self.delete_walls = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -84,6 +88,9 @@ class Controls:
                 elif key == pygame.K_v:
                     self.toggle_vectors = True
 
+                elif key == pygame.K_w:
+                    self.delete_walls = True
+
                 elif key == pygame.K_ESCAPE or key == pygame.K_q:
                     self.quit = True
 
@@ -95,6 +102,7 @@ class Controls:
             "[R] reset world",
             "[L] reload rules",
             "[+/-] speed",
+            "[W] delete walls 50/75/100%",
             "[I] toggle IDs",
             "[V] toggle vectors",
             "[Q/ESC] quit",

@@ -9,6 +9,7 @@ from typing import Any
 
 import pygame
 
+from gol_multiworld.sim.cell_types import CellType
 from gol_multiworld.sim.coordinator import coordinator_tick
 from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
@@ -76,6 +77,7 @@ class App:
         self.tick: int = 0
         self.show_ids: bool = True
         self.show_vectors: bool = False
+        self.wall_delete_stage: int = 0
 
         self.renderer = Renderer(
             self.screen,
@@ -104,6 +106,8 @@ class App:
                     self._reload_rules()
                 if self.controls.reset:
                     self._reset_world()
+                if self.controls.delete_walls:
+                    self._delete_walls_stage()
                 if self.controls.speed_up:
                     self.fps = min(MAX_FPS, self.fps + 1)
                 if self.controls.speed_down:
@@ -126,6 +130,7 @@ class App:
                     )
                 self.renderer.draw_overlays(
                     self.organisms,
+                    self.tick,
                     show_ids=self.show_ids,
                     show_vectors=self.show_vectors,
                 )
@@ -230,7 +235,30 @@ class App:
         """Reset the grid and organisms to a new random state."""
         self.tick = 0
         self.organisms = []
+        self.wall_delete_stage = 0
         new_seed = self.rng.randint(0, 2**31)
         self.grid = Grid(self.grid_w, self.grid_h)
         generate_walls(self.grid, self.rules, random.Random(new_seed))
         self.grid.randomize(self.rules, seed=new_seed)
+
+    def _delete_walls_stage(self) -> None:
+        """Delete walls in three presses: 50%, 75%, then all."""
+        wall_cells = [
+            (x, y)
+            for y in range(self.grid.height)
+            for x in range(self.grid.width)
+            if self.grid.get(x, y) == CellType.WALL
+        ]
+        if not wall_cells:
+            self.wall_delete_stage = 3
+            return
+
+        self.wall_delete_stage = min(3, self.wall_delete_stage + 1)
+        if self.wall_delete_stage < 3:
+            remove_count = max(1, len(wall_cells) // 2)
+            walls_to_remove = self.rng.sample(wall_cells, remove_count)
+        else:
+            walls_to_remove = wall_cells
+
+        for x, y in walls_to_remove:
+            self.grid.set(x, y, CellType.EMPTY)

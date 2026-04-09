@@ -15,6 +15,7 @@ _ORGANISM_CELL_COLOR = CELL_COLORS[CellType.LIVE]
 _NON_ORGANISM_CELL_COLOR = (25, 90, 25)
 _OVERLAY_BOX_COLOR = (80, 200, 255)
 _OVERLAY_TEXT_COLOR = (255, 255, 255)
+_OVERLAY_LABEL_BG = (10, 10, 20)
 _TINY_CLUSTER_COLOR = (60, 100, 60)
 
 _LINE_SPACING = 2       # Pixels between text lines
@@ -73,6 +74,7 @@ class Renderer:
     def draw_overlays(
         self,
         organisms: list[Organism],
+        tick: int,
         show_ids: bool = True,
         show_vectors: bool = False,
     ) -> None:
@@ -91,9 +93,31 @@ class Renderer:
             )
             pygame.draw.rect(self.surface, _OVERLAY_BOX_COLOR, rect, 1)
 
+            label_lines: list[str] = []
             if show_ids:
-                label = font.render(str(org.organism_id), True, _OVERLAY_TEXT_COLOR)
-                self.surface.blit(label, (rect.x + 2, rect.y + 2))
+                label_lines.append(f"({org.organism_id})")
+            label_lines.append(f"[d {org.travel_distance:.0f}]")
+            label_lines.append(f"[t {org.survival_time(tick)}]")
+
+            label_surfaces = [
+                font.render(line, True, _OVERLAY_TEXT_COLOR) for line in label_lines
+            ]
+            line_h = font.get_height() + _LINE_SPACING
+            label_w = max(surface.get_width() for surface in label_surfaces) + 6
+            label_h = len(label_surfaces) * line_h + 4
+            label_rect = pygame.Rect(
+                rect.x + 1,
+                rect.bottom - label_h - 1,
+                label_w,
+                label_h,
+            )
+            pygame.draw.rect(self.surface, _OVERLAY_LABEL_BG, label_rect)
+
+            for index, surface in enumerate(label_surfaces):
+                self.surface.blit(
+                    surface,
+                    (label_rect.x + 3, label_rect.y + 2 + index * line_h),
+                )
 
     # ------------------------------------------------------------------
     # Debug / status panel
