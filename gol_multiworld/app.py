@@ -88,64 +88,100 @@ class App:
 
     def run(self) -> None:
         """Enter the main event/render loop."""
-        while not self.controls.quit:
-            self.controls.process_events()
+        try:
+            while not self.controls.quit:
+                self.controls.process_events()
 
-            # Apply single-frame toggle flags
-            if self.controls.toggle_ids:
-                self.show_ids = not self.show_ids
-            if self.controls.toggle_vectors:
-                self.show_vectors = not self.show_vectors
-            if self.controls.reload_rules:
-                self._reload_rules()
-            if self.controls.reset:
-                self._reset_world()
-            if self.controls.speed_up:
-                self.fps = min(MAX_FPS, self.fps + 1)
-            if self.controls.speed_down:
-                self.fps = max(MIN_FPS, self.fps - 1)
+                # Apply single-frame toggle flags
+                if self.controls.toggle_ids:
+                    self.show_ids = not self.show_ids
+                if self.controls.toggle_vectors:
+                    self.show_vectors = not self.show_vectors
+                if self.controls.reload_rules:
+                    self._reload_rules()
+                if self.controls.reset:
+                    self._reset_world()
+                if self.controls.speed_up:
+                    self.fps = min(MAX_FPS, self.fps + 1)
+                if self.controls.speed_down:
+                    self.fps = max(MIN_FPS, self.fps - 1)
 
-            # Advance simulation
-            if not self.controls.paused or self.controls.step_once:
-                self._advance()
+                # Advance simulation
+                if not self.controls.paused or self.controls.step_once:
+                    self._advance()
 
-            # Draw
-            self.screen.fill((20, 20, 30))
-            self.renderer.draw_grid(self.grid)
-            if self.cell_size >= 4:
-                draw_grid_lines(
-                    self.screen,
-                    self.grid,
-                    self.cell_size,
-                    0,
-                    0,
+                # Draw
+                self.screen.fill((20, 20, 30))
+                self.renderer.draw_grid(self.grid)
+                if self.cell_size >= 4:
+                    draw_grid_lines(
+                        self.screen,
+                        self.grid,
+                        self.cell_size,
+                        0,
+                        0,
+                    )
+                self.renderer.draw_overlays(
+                    self.organisms,
+                    show_ids=self.show_ids,
+                    show_vectors=self.show_vectors,
                 )
-            self.renderer.draw_overlays(
-                self.organisms,
-                show_ids=self.show_ids,
-                show_vectors=self.show_vectors,
-            )
 
-            panel_x = WINDOW_WIDTH - PANEL_WIDTH
-            self.renderer.draw_status(
-                self.tick,
-                self.organisms,
-                self.controls.paused,
-                panel_x=panel_x,
-                panel_y=0,
-            )
-            draw_key_help(
-                self.screen,
-                self.font,
-                self.controls.key_help(),
-                x=panel_x + 4,
-                y=160,
-            )
+                panel_x = WINDOW_WIDTH - PANEL_WIDTH
+                self.renderer.draw_status(
+                    self.tick,
+                    self.organisms,
+                    self.controls.paused,
+                    panel_x=panel_x,
+                    panel_y=0,
+                )
+                # Draw legend panel below status, above key help
+                self._draw_legend_panel(panel_x=panel_x, panel_y=120)
+                draw_key_help(
+                    self.screen,
+                    self.font,
+                    self.controls.key_help(),
+                    x=panel_x + 4,
+                    y=160,
+                )
 
-            pygame.display.flip()
-            self.clock.tick(self.fps)
+                pygame.display.flip()
 
-        pygame.quit()
+                self.clock.tick(self.fps)
+        finally:
+            pygame.quit()
+
+    def _draw_legend_panel(self, panel_x: int, panel_y: int) -> None:
+        """Draw a legend for cell colors and their meanings."""
+        font = self.font
+        legend = [
+            ("EMPTY", (20, 20, 30)),
+            ("LIVE", (100, 220, 100)),
+            ("FOOD", (220, 200, 50)),
+            ("WALL", (120, 120, 130)),
+            ("TOXIC", (200, 50, 180)),
+        ]
+        labels = [
+            ("Empty", (20, 20, 30)),
+            ("Live cell", (100, 220, 100)),
+            ("Food", (220, 200, 50)),
+            ("Wall", (120, 120, 130)),
+            ("Toxic", (200, 50, 180)),
+        ]
+        line_h = font.get_height() + 2
+        panel_w = 220
+        panel_h = len(labels) * line_h + 8
+        bg_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        pygame.draw.rect(self.screen, (10, 10, 20), bg_rect)
+        title = font.render("Legend:", True, (200, 230, 200))
+        self.screen.blit(title, (panel_x + 4, panel_y + 4))
+        for i, (label, color) in enumerate(labels):
+            y = panel_y + 4 + (i + 1) * line_h
+            # Draw color box
+            pygame.draw.rect(self.screen, color, (panel_x + 8, y + 2, 18, 12))
+            # Draw label
+            text = font.render(label, True, (200, 230, 200))
+            self.screen.blit(text, (panel_x + 32, y))
 
     # ------------------------------------------------------------------
     # Helpers
