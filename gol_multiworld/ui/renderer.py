@@ -107,7 +107,7 @@ class Renderer:
             label_h = len(label_surfaces) * line_h + 4
             label_rect = pygame.Rect(
                 rect.x + 1,
-                rect.bottom - label_h - 1,
+                rect.bottom + 1,
                 label_w,
                 label_h,
             )
