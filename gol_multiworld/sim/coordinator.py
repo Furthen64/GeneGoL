@@ -10,10 +10,12 @@ from gol_multiworld.sim.genes import Gene
 from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import Organism
 
-# Minimum number of living organisms before the coordinator spawns more
-_LOW_ORGANISM_THRESHOLD = 2
 # Size of each seeded clump (2×2 square of Live cells)
 _CLUMP_SIZE = 2
+
+# Default minimum organism count before coordinator activates
+# (can be overridden in rules JSON via "coordinatorSpawnThreshold")
+_DEFAULT_SPAWN_THRESHOLD = 2
 
 
 def coordinator_tick(
@@ -37,14 +39,16 @@ def coordinator_tick(
     tick:
         Current simulation tick.
     rules:
-        Loaded rules dictionary.
+        Loaded rules dictionary.  Reads ``coordinatorSpawnThreshold``
+        (default 2) to determine when spawning is triggered.
     rng:
         Optional seeded random instance.
     """
     if rng is None:
         rng = random.Random()
 
-    if len(organisms) >= _LOW_ORGANISM_THRESHOLD:
+    threshold: int = int(rules.get("coordinatorSpawnThreshold", _DEFAULT_SPAWN_THRESHOLD))
+    if len(organisms) >= threshold:
         return
 
     # Find a free area (no walls or other non-empty cells nearby)

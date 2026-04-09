@@ -15,6 +15,9 @@ _OVERLAY_BOX_COLOR = (80, 200, 255)
 _OVERLAY_TEXT_COLOR = (255, 255, 255)
 _TINY_CLUSTER_COLOR = (60, 100, 60)
 
+_LINE_SPACING = 2       # Pixels between text lines
+_STATUS_PANEL_WIDTH = 220
+
 
 class Renderer:
     """Handles all drawing operations for the simulation."""
@@ -111,11 +114,12 @@ class Renderer:
         if extra_lines:
             lines.extend(extra_lines)
 
-        bg_height = len(lines) * (font.get_height() + 2) + 4
-        bg_width = 220
-        bg_rect = pygame.Rect(panel_x, panel_y, bg_width, bg_height)
+        line_h = font.get_height() + _LINE_SPACING
+        bg_height = len(lines) * line_h + 4
+        bg_rect = pygame.Rect(panel_x, panel_y, _STATUS_PANEL_WIDTH, bg_height)
         pygame.draw.rect(self.surface, (10, 10, 20), bg_rect)
 
         for i, line in enumerate(lines):
             surf = font.render(line, True, (200, 230, 200))
-            self.surface.blit(surf, (panel_x + 4, panel_y + 4 + i * (font.get_height() + 2)))
+            self.surface.blit(surf, (panel_x + 4, panel_y + 4 + i * line_h))
+

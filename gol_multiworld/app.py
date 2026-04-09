@@ -175,10 +175,16 @@ class App:
 
     def _reload_rules(self) -> None:
         """Hot-reload the rules JSON file."""
+        import json
+        from gol_multiworld.sim.rules_engine import RulesValidationError
         try:
             self.rules = load_rules(self.rules_path)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[rules reload] Error: {exc}", file=sys.stderr)
+        except FileNotFoundError as exc:
+            print(f"[rules reload] File not found: {exc}", file=sys.stderr)
+        except json.JSONDecodeError as exc:
+            print(f"[rules reload] Invalid JSON: {exc}", file=sys.stderr)
+        except RulesValidationError as exc:
+            print(f"[rules reload] Validation error: {exc}", file=sys.stderr)
 
     def _reset_world(self) -> None:
         """Reset the grid and organisms to a new random state."""

@@ -16,6 +16,15 @@ _NEIGHBOR_OFFSETS: list[tuple[int, int]] = [
     (-1,  1), (0,  1), (1,  1),
 ]
 
+# Steering scoring constants (positive = attractive, negative = repulsive)
+_FOOD_DIRECT_SCORE = 10.0    # Score when candidate IS a food cell
+_FOOD_INVERSE_SCORE = 1.0    # Numerator for 1/dist food attraction
+_TOXIC_DIRECT_PENALTY = 5.0  # Penalty when candidate is on a bad-zone cell
+_TOXIC_INVERSE_PENALTY = 0.5 # Numerator for 1/dist toxic repulsion
+
+# Default food search radius in cells around the organism centroid
+_DEFAULT_FOOD_SEARCH_RADIUS = 10
+
 
 def d3_tick(
     grid: Grid,
@@ -175,22 +184,22 @@ def _score_candidate(
     for fx, fy in food_positions:
         dist = abs(cx - fx) + abs(cy - fy)
         if dist == 0:
-            score += 10.0
+            score += _FOOD_DIRECT_SCORE
         else:
-            score += 1.0 / dist
+            score += _FOOD_INVERSE_SCORE / dist
 
     for (bx, by) in org.bad_zones:
         dist = abs(cx - bx) + abs(cy - by)
         if dist == 0:
-            score -= 5.0
+            score -= _TOXIC_DIRECT_PENALTY
         else:
-            score -= 0.5 / dist
+            score -= _TOXIC_INVERSE_PENALTY / dist
 
     return score
 
 
 def _nearby_food(
-    grid: Grid, org: Organism, search_radius: int = 10
+    grid: Grid, org: Organism, search_radius: int = _DEFAULT_FOOD_SEARCH_RADIUS
 ) -> list[tuple[int, int]]:
     """Return food cell positions within search_radius of the organism centroid."""
     cx, cy = org.centroid()
