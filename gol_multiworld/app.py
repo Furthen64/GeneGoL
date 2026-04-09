@@ -115,7 +115,7 @@ class App:
 
                 # Draw
                 self.screen.fill((20, 20, 30))
-                self.renderer.draw_grid(self.grid)
+                self.renderer.draw_grid(self.grid, self.organisms)
                 if self.cell_size >= 4:
                     draw_grid_lines(
                         self.screen,
@@ -166,7 +166,8 @@ class App:
         ]
         labels = [
             ("Empty", (20, 20, 30)),
-            ("Live cell", (100, 220, 100)),
+            ("Organism cell", (100, 220, 100)),
+            ("Non-organism live", (25, 90, 25)),
             ("Food", (220, 200, 50)),
             ("Wall", (120, 120, 130)),
             ("Toxic", (200, 50, 180)),

@@ -11,6 +11,8 @@ from gol_multiworld.sim.grid import Grid
 from gol_multiworld.sim.organism_detection import Organism
 
 # Organism overlay colors
+_ORGANISM_CELL_COLOR = CELL_COLORS[CellType.LIVE]
+_NON_ORGANISM_CELL_COLOR = (25, 90, 25)
 _OVERLAY_BOX_COLOR = (80, 200, 255)
 _OVERLAY_TEXT_COLOR = (255, 255, 255)
 _TINY_CLUSTER_COLOR = (60, 100, 60)
@@ -44,14 +46,23 @@ class Renderer:
     # Grid rendering
     # ------------------------------------------------------------------
 
-    def draw_grid(self, grid: Grid) -> None:
+    def draw_grid(self, grid: Grid, organisms: list[Organism] | None = None) -> None:
         """Draw all cells in the grid."""
         cs = self.cell_size
         ox, oy = self.grid_offset_x, self.grid_offset_y
+        organism_cells = {
+            cell for org in organisms or [] for cell in org.cells
+        }
         for y in range(grid.height):
             for x in range(grid.width):
                 cell = grid.get(x, y)
                 color = CELL_COLORS.get(cell, (0, 0, 0))
+                if cell == CellType.LIVE:
+                    color = (
+                        _ORGANISM_CELL_COLOR
+                        if (x, y) in organism_cells
+                        else _NON_ORGANISM_CELL_COLOR
+                    )
                 rect = pygame.Rect(ox + x * cs, oy + y * cs, cs, cs)
                 pygame.draw.rect(self.surface, color, rect)
 
@@ -110,6 +121,12 @@ class Renderer:
                 o.survival_time(tick) for o in organisms
             ) / len(organisms)
             lines.append(f"Avg survival: {avg_survival:.1f}")
+            avg_travel = sum(o.travel_distance for o in organisms) / len(organisms)
+            lines.append(f"Avg travel: {avg_travel:.2f}")
+            best_org = max(organisms, key=lambda org: org.fitness(tick))
+            lines.append(
+                f"Top fitness: #{best_org.organism_id} {best_org.fitness(tick):.2f}"
+            )
         lines.append("PAUSED" if paused else "RUNNING")
         if extra_lines:
             lines.extend(extra_lines)

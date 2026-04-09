@@ -95,6 +95,39 @@ def test_survival_time_increases() -> None:
     assert orgs5[0].survival_time(5) == 5
 
 
+def test_travel_distance_stays_zero_when_centroid_does_not_move() -> None:
+    cells = [(5, 5), (5, 6), (6, 5), (6, 6)]
+    grid = _grid_with_cluster(cells)
+    orgs0 = detect_organisms(grid, tick=0, previous=[], rules=RULES)
+
+    orgs1 = detect_organisms(grid, tick=1, previous=orgs0, rules=RULES)
+
+    assert orgs1[0].travel_distance == pytest.approx(0.0)
+
+
+def test_travel_distance_accumulates_centroid_motion() -> None:
+    grid0 = _grid_with_cluster([(5, 5), (5, 6), (6, 5), (6, 6)])
+    orgs0 = detect_organisms(grid0, tick=0, previous=[], rules=RULES)
+
+    grid1 = _grid_with_cluster([(6, 5), (6, 6), (7, 5), (7, 6)])
+    orgs1 = detect_organisms(grid1, tick=1, previous=orgs0, rules=RULES)
+
+    assert orgs1[0].organism_id == orgs0[0].organism_id
+    assert orgs1[0].travel_distance == pytest.approx(1.0)
+    assert orgs1[0].fitness(1) == pytest.approx(1.0)
+
+
+def test_new_organism_starts_with_zero_travel_distance() -> None:
+    grid0 = _grid_with_cluster([(1, 1), (1, 2), (2, 1), (2, 2)])
+    orgs0 = detect_organisms(grid0, tick=0, previous=[], rules=RULES)
+
+    grid1 = _grid_with_cluster([(10, 10), (10, 11), (11, 10), (11, 11)])
+    orgs1 = detect_organisms(grid1, tick=1, previous=orgs0, rules=RULES)
+
+    assert orgs1[0].travel_distance == pytest.approx(0.0)
+    assert orgs1[0].fitness(1) == pytest.approx(0.0)
+
+
 def test_bounding_box_correct() -> None:
     # Diagonal chain (8-connected): (2,3)→(3,4)→(4,5) plus (4,4)
     # Bounding box should be x: 2..4, y: 3..5

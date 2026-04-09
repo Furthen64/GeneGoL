@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+import math
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
@@ -28,15 +29,19 @@ class Organism:
     last_seen_tick: int
     gene: Gene = field(default_factory=Gene)
     bad_zones: dict[tuple[int, int], int] = field(default_factory=dict)
+    last_centroid: tuple[float, float] | None = None
+    travel_distance: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.last_centroid is None and self.cells:
+            self.last_centroid = _centroid_for_cells(self.cells)
 
     @property
     def size(self) -> int:
         return len(self.cells)
 
     def centroid(self) -> tuple[float, float]:
-        xs = [c[0] for c in self.cells]
-        ys = [c[1] for c in self.cells]
-        return sum(xs) / len(xs), sum(ys) / len(ys)
+        return _centroid_for_cells(self.cells)
 
     def bounding_box(self) -> tuple[int, int, int, int]:
         """Return (min_x, min_y, max_x, max_y)."""
@@ -46,6 +51,9 @@ class Organism:
 
     def survival_time(self, current_tick: int) -> int:
         return current_tick - self.birth_tick
+
+    def fitness(self, current_tick: int) -> float:
+        return self.travel_distance * self.survival_time(current_tick)
 
 
 def detect_organisms(
@@ -103,6 +111,7 @@ def detect_organisms(
     result: list[Organism] = []
 
     for cluster in clusters:
+        cluster_centroid = _centroid_for_cells(cluster)
         # Vote for the best matching previous organism
         votes: dict[int, int] = {}
         for cell in cluster:
@@ -123,12 +132,17 @@ def detect_organisms(
             birth = matched_org.birth_tick
             gene = matched_org.gene
             bad_zones = matched_org.bad_zones
+            previous_centroid = matched_org.last_centroid or matched_org.centroid()
+            travel_distance = matched_org.travel_distance + _distance_between(
+                previous_centroid, cluster_centroid
+            )
         else:
             oid = next_id
             next_id += 1
             birth = tick
             gene = Gene()
             bad_zones = {}
+            travel_distance = 0.0
 
         used_ids.add(oid)
         result.append(
@@ -139,6 +153,8 @@ def detect_organisms(
                 last_seen_tick=tick,
                 gene=gene,
                 bad_zones=bad_zones,
+                last_centroid=cluster_centroid,
+                travel_distance=travel_distance,
             )
         )
 
@@ -178,3 +194,15 @@ def _next_free_id(previous: list[Organism]) -> int:
     if not previous:
         return 1
     return max(o.organism_id for o in previous) + 1
+
+
+def _centroid_for_cells(cells: set[tuple[int, int]]) -> tuple[float, float]:
+    xs = [c[0] for c in cells]
+    ys = [c[1] for c in cells]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def _distance_between(
+    first: tuple[float, float], second: tuple[float, float]
+) -> float:
+    return math.dist(first, second)
