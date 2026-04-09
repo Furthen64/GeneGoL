@@ -1,0 +1,29 @@
+{
+  "minimumOrganismSize": 4,
+  "d3GuidanceWeight": 0.30,
+  "caWeight": 0.70,
+
+  "foodScarcity": 0.02,
+  "toxicMemoryTicks": 30,
+
+  "states": ["Empty", "Live", "Food", "Wall", "Toxic"],
+
+  "liveCell": {
+    "surviveIfVisibleLiveNeighborsIn": [2, 3]
+  },
+  "emptyCell": {
+    "bornIfVisibleLiveNeighborsIn": [3]
+  },
+
+  "foodCell": {
+    "staticUntilConsumedByD3": true
+  },
+  "toxicCell": {
+    "static": true,
+    "emitAvoidSignalOnContact": true
+  },
+  "wallCell": {
+    "static": true,
+    "blocksVisibilityCompletely": true
+  }
+}

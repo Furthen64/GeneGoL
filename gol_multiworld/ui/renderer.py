@@ -1,0 +1,121 @@
+"""Pygame-ce renderer for the grid and overlays."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pygame
+
+from gol_multiworld.sim.cell_types import CELL_COLORS, CellType
+from gol_multiworld.sim.grid import Grid
+from gol_multiworld.sim.organism_detection import Organism
+
+# Organism overlay colors
+_OVERLAY_BOX_COLOR = (80, 200, 255)
+_OVERLAY_TEXT_COLOR = (255, 255, 255)
+_TINY_CLUSTER_COLOR = (60, 100, 60)
+
+
+class Renderer:
+    """Handles all drawing operations for the simulation."""
+
+    def __init__(
+        self,
+        surface: pygame.Surface,
+        cell_size: int = 8,
+        grid_offset_x: int = 0,
+        grid_offset_y: int = 0,
+    ) -> None:
+        self.surface = surface
+        self.cell_size = cell_size
+        self.grid_offset_x = grid_offset_x
+        self.grid_offset_y = grid_offset_y
+        self._font: pygame.font.Font | None = None
+
+    def _get_font(self) -> pygame.font.Font:
+        if self._font is None:
+            self._font = pygame.font.SysFont("monospace", max(10, self.cell_size))
+        return self._font
+
+    # ------------------------------------------------------------------
+    # Grid rendering
+    # ------------------------------------------------------------------
+
+    def draw_grid(self, grid: Grid) -> None:
+        """Draw all cells in the grid."""
+        cs = self.cell_size
+        ox, oy = self.grid_offset_x, self.grid_offset_y
+        for y in range(grid.height):
+            for x in range(grid.width):
+                cell = grid.get(x, y)
+                color = CELL_COLORS.get(cell, (0, 0, 0))
+                rect = pygame.Rect(ox + x * cs, oy + y * cs, cs, cs)
+                pygame.draw.rect(self.surface, color, rect)
+
+    # ------------------------------------------------------------------
+    # Organism overlay
+    # ------------------------------------------------------------------
+
+    def draw_overlays(
+        self,
+        organisms: list[Organism],
+        show_ids: bool = True,
+        show_vectors: bool = False,
+    ) -> None:
+        """Draw organism bounding boxes and optional labels."""
+        cs = self.cell_size
+        ox, oy = self.grid_offset_x, self.grid_offset_y
+        font = self._get_font()
+
+        for org in organisms:
+            min_x, min_y, max_x, max_y = org.bounding_box()
+            rect = pygame.Rect(
+                ox + min_x * cs,
+                oy + min_y * cs,
+                (max_x - min_x + 1) * cs,
+                (max_y - min_y + 1) * cs,
+            )
+            pygame.draw.rect(self.surface, _OVERLAY_BOX_COLOR, rect, 1)
+
+            if show_ids:
+                label = font.render(str(org.organism_id), True, _OVERLAY_TEXT_COLOR)
+                self.surface.blit(label, (rect.x + 2, rect.y + 2))
+
+    # ------------------------------------------------------------------
+    # Debug / status panel
+    # ------------------------------------------------------------------
+
+    def draw_status(
+        self,
+        tick: int,
+        organisms: list[Organism],
+        paused: bool,
+        extra_lines: list[str] | None = None,
+        panel_x: int = 0,
+        panel_y: int = 0,
+    ) -> None:
+        """Draw a debug status panel in the top-right or specified area."""
+        font = self._get_font()
+        lines: list[str] = [
+            f"Tick: {tick}",
+            f"Organisms: {len(organisms)}",
+        ]
+        if organisms:
+            sizes = [o.size for o in organisms]
+            lines.append(f"Largest: {max(sizes)}")
+            avg_survival = sum(
+                o.survival_time(tick) for o in organisms
+            ) / len(organisms)
+            lines.append(f"Avg survival: {avg_survival:.1f}")
+        lines.append("PAUSED" if paused else "RUNNING")
+        if extra_lines:
+            lines.extend(extra_lines)
+
+        bg_height = len(lines) * (font.get_height() + 2) + 4
+        bg_width = 220
+        bg_rect = pygame.Rect(panel_x, panel_y, bg_width, bg_height)
+        pygame.draw.rect(self.surface, (10, 10, 20), bg_rect)
+
+        for i, line in enumerate(lines):
+            surf = font.render(line, True, (200, 230, 200))
+            self.surface.blit(surf, (panel_x + 4, panel_y + 4 + i * (font.get_height() + 2)))
