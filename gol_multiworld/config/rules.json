@@ -4,7 +4,12 @@
   "caWeight": 0.70,
 
   "foodScarcity": 0.02,
+  "foodSpoilChance": 0.01,
   "toxicMemoryTicks": 30,
+  "toxicSpawnClusters": {
+    "countRange": [3, 6],
+    "sizeRange": [2, 5]
+  },
 
   "states": ["Empty", "Live", "Food", "Wall", "Toxic"],
 

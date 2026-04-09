@@ -14,7 +14,11 @@ from gol_multiworld.sim.coordinator import coordinator_tick
 from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
 from gol_multiworld.sim.grid import Grid
-from gol_multiworld.sim.organism_detection import Organism, detect_organisms
+from gol_multiworld.sim.organism_detection import (
+    Organism,
+    cull_stagnating_organisms,
+    detect_organisms,
+)
 from gol_multiworld.sim.rules_engine import load_rules
 from gol_multiworld.sim.wall_generator import generate_walls
 from gol_multiworld.ui.controls import Controls
@@ -199,11 +203,14 @@ class App:
     def _advance(self) -> None:
         """Run one full simulation tick."""
         # 1. D2 update
-        self.grid = d2_update(self.grid, self.rules)
+        self.grid = d2_update(self.grid, self.rules, self.rng)
 
         # 2. D3 detect organisms
         self.organisms = detect_organisms(
             self.grid, self.tick, self.organisms, self.rules
+        )
+        self.organisms = cull_stagnating_organisms(
+            self.grid, self.organisms, self.rules
         )
 
         # 3 & 4 & 5. D3 food, toxic, steering

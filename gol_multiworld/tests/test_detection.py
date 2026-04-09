@@ -6,7 +6,11 @@ import pytest
 
 from gol_multiworld.sim.cell_types import CellType
 from gol_multiworld.sim.grid import Grid
-from gol_multiworld.sim.organism_detection import Organism, detect_organisms
+from gol_multiworld.sim.organism_detection import (
+    Organism,
+    cull_stagnating_organisms,
+    detect_organisms,
+)
 
 RULES = {
     "minimumOrganismSize": 4,
@@ -126,6 +130,55 @@ def test_new_organism_starts_with_zero_travel_distance() -> None:
 
     assert orgs1[0].travel_distance == pytest.approx(0.0)
     assert orgs1[0].fitness(1) == pytest.approx(0.0)
+
+
+def test_static_organism_is_culled_after_four_ticks() -> None:
+    cells = [(5, 5), (5, 6), (6, 5), (6, 6)]
+    grid = _grid_with_cluster(cells)
+    orgs: list[Organism] = []
+
+    for tick in range(4):
+        orgs = detect_organisms(grid, tick=tick, previous=orgs, rules=RULES)
+        orgs = cull_stagnating_organisms(grid, orgs, RULES)
+
+    assert orgs == []
+    assert all(grid.get(x, y) == CellType.EMPTY for x, y in cells)
+
+
+def test_two_state_oscillator_is_culled_after_four_ticks() -> None:
+    states = [
+        [(5, 5), (6, 5), (7, 5), (8, 5)],
+        [(6, 4), (6, 5), (6, 6), (6, 7)],
+        [(5, 5), (6, 5), (7, 5), (8, 5)],
+        [(6, 4), (6, 5), (6, 6), (6, 7)],
+    ]
+    orgs: list[Organism] = []
+    last_grid = Grid(20, 20)
+
+    for tick, cells in enumerate(states):
+        last_grid = _grid_with_cluster(cells)
+        orgs = detect_organisms(last_grid, tick=tick, previous=orgs, rules=RULES)
+        orgs = cull_stagnating_organisms(last_grid, orgs, RULES)
+
+    assert orgs == []
+    assert all(last_grid.get(x, y) == CellType.EMPTY for x, y in states[-1])
+
+
+def test_non_repeating_organism_survives_history_window() -> None:
+    states = [
+        [(5, 5), (5, 6), (6, 5), (6, 6)],
+        [(6, 5), (6, 6), (7, 5), (7, 6)],
+        [(7, 5), (7, 6), (8, 5), (8, 6)],
+        [(8, 5), (8, 6), (9, 5), (9, 6)],
+    ]
+    orgs: list[Organism] = []
+
+    for tick, cells in enumerate(states):
+        grid = _grid_with_cluster(cells)
+        orgs = detect_organisms(grid, tick=tick, previous=orgs, rules=RULES)
+        orgs = cull_stagnating_organisms(grid, orgs, RULES)
+
+    assert len(orgs) == 1
 
 
 def test_bounding_box_correct() -> None:

@@ -18,6 +18,8 @@ _NEIGHBOR_OFFSETS: list[tuple[int, int]] = [
     (-1,  1), (0,  1), (1,  1),
 ]
 
+_DEFAULT_STAGNATION_WINDOW = 4
+
 
 @dataclass
 class Organism:
@@ -31,6 +33,7 @@ class Organism:
     bad_zones: dict[tuple[int, int], int] = field(default_factory=dict)
     last_centroid: tuple[float, float] | None = None
     travel_distance: float = 0.0
+    recent_signatures: list[frozenset[tuple[int, int]]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.last_centroid is None and self.cells:
@@ -54,6 +57,12 @@ class Organism:
 
     def fitness(self, current_tick: int) -> float:
         return self.travel_distance * self.survival_time(current_tick)
+
+    def is_stagnating(self, rules: dict[str, Any]) -> bool:
+        window = max(2, int(rules.get("stagnationKillTicks", _DEFAULT_STAGNATION_WINDOW)))
+        if len(self.recent_signatures) < window:
+            return False
+        return _has_repeating_suffix(self.recent_signatures)
 
 
 def detect_organisms(
@@ -87,6 +96,9 @@ def detect_organisms(
         Newly detected organisms for this tick.
     """
     min_size: int = rules.get("minimumOrganismSize", 4)
+    history_window = max(
+        2, int(rules.get("stagnationKillTicks", _DEFAULT_STAGNATION_WINDOW))
+    )
 
     # BFS to find all connected Live clusters
     visited: set[tuple[int, int]] = set()
@@ -112,6 +124,7 @@ def detect_organisms(
 
     for cluster in clusters:
         cluster_centroid = _centroid_for_cells(cluster)
+        cluster_signature = frozenset(cluster)
         # Vote for the best matching previous organism
         votes: dict[int, int] = {}
         for cell in cluster:
@@ -132,6 +145,9 @@ def detect_organisms(
             birth = matched_org.birth_tick
             gene = matched_org.gene
             bad_zones = matched_org.bad_zones
+            recent_signatures = (
+                matched_org.recent_signatures + [cluster_signature]
+            )[-history_window:]
             previous_centroid = matched_org.last_centroid or matched_org.centroid()
             travel_distance = matched_org.travel_distance + _distance_between(
                 previous_centroid, cluster_centroid
@@ -143,6 +159,7 @@ def detect_organisms(
             gene = Gene()
             bad_zones = {}
             travel_distance = 0.0
+            recent_signatures = [cluster_signature]
 
         used_ids.add(oid)
         result.append(
@@ -155,10 +172,27 @@ def detect_organisms(
                 bad_zones=bad_zones,
                 last_centroid=cluster_centroid,
                 travel_distance=travel_distance,
+                recent_signatures=recent_signatures,
             )
         )
 
     return result
+
+
+def cull_stagnating_organisms(
+    grid: Grid,
+    organisms: list[Organism],
+    rules: dict[str, Any],
+) -> list[Organism]:
+    """Remove organisms that have entered a static or oscillating loop."""
+    survivors: list[Organism] = []
+    for organism in organisms:
+        if organism.is_stagnating(rules):
+            for x, y in organism.cells:
+                grid.set(x, y, CellType.EMPTY)
+            continue
+        survivors.append(organism)
+    return survivors
 
 
 def _bfs(
@@ -206,3 +240,10 @@ def _distance_between(
     first: tuple[float, float], second: tuple[float, float]
 ) -> float:
     return math.dist(first, second)
+
+
+def _has_repeating_suffix(signatures: list[frozenset[tuple[int, int]]]) -> bool:
+    for period in range(1, len(signatures) // 2 + 1):
+        if signatures[-period:] == signatures[-2 * period:-period]:
+            return True
+    return False
