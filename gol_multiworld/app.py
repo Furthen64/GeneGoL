@@ -462,7 +462,7 @@ class App:
         print(f"[gif] Saved recording to {output_path}")
 
     def _delete_walls_stage(self) -> None:
-        """Delete walls in three presses: 50%, 75%, then all."""
+        """Delete walls in three presses: leave 75%, then 50%, then none."""
         wall_cells = [
             (x, y)
             for y in range(self.grid.height)
@@ -475,7 +475,10 @@ class App:
 
         self.wall_delete_stage = min(3, self.wall_delete_stage + 1)
         if self.wall_delete_stage < 3:
-            remove_count = max(1, len(wall_cells) // 2)
+            # Stage 1 removes 25% of current walls (leaves ~75%).
+            # Stage 2 removes 33% of current walls (leaves ~50% of original).
+            remove_fraction = 0.25 if self.wall_delete_stage == 1 else (1.0 / 3.0)
+            remove_count = max(1, int(round(len(wall_cells) * remove_fraction)))
             walls_to_remove = self.rng.sample(wall_cells, remove_count)
         else:
             walls_to_remove = wall_cells

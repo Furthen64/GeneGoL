@@ -128,7 +128,7 @@ class Controls:
             "[+/-] speed",
             "[1/2/3] presets",
             "[Shift+1/2/3] group toggles",
-            "[W] delete walls 50/75/100%",
+            "[W] delete walls 25/50/100%",
             "[J] start GIF",
             "[K] stop GIF",
             "[I] toggle IDs",
