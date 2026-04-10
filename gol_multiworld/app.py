@@ -107,6 +107,7 @@ class App:
         self.controls = Controls()
         self.recorder = GifRecorder(GIF_OUTPUT_DIR)
         self.recording_notice: str | None = None
+        self.wall_delete_notice: str | None = None
         self.layer_manager = LayerManager()
         panel_x = WINDOW_WIDTH - PANEL_WIDTH
         self.layers_panel = LayersPanel(panel_x, 160, PANEL_WIDTH - 4, self.font)
@@ -255,6 +256,8 @@ class App:
             )
         elif self.recording_notice:
             lines.append(self.recording_notice)
+        if self.wall_delete_notice:
+            lines.append(self.wall_delete_notice)
         lines.extend(self._inspector_lines())
         return lines
 
@@ -435,6 +438,7 @@ class App:
         self.organisms = []
         self.organism_id_state = {"next_organism_id": 1}
         self.wall_delete_stage = 0
+        self.wall_delete_notice = None
         new_seed = self.rng.randint(0, 2**31)
         self.grid = Grid(self.grid_w, self.grid_h)
         generate_walls(self.grid, self.rules, random.Random(new_seed))
@@ -471,8 +475,11 @@ class App:
         ]
         if not wall_cells:
             self.wall_delete_stage = 3
+            self.wall_delete_notice = "W pressed: no walls found"
+            print("[walls] W pressed but no walls are present")
             return
 
+        before_count = len(wall_cells)
         self.wall_delete_stage = min(3, self.wall_delete_stage + 1)
         if self.wall_delete_stage < 3:
             # Stage 1 removes 25% of current walls (leaves ~75%).
@@ -483,5 +490,35 @@ class App:
         else:
             walls_to_remove = wall_cells
 
+        removed_count = 0
         for x, y in walls_to_remove:
-            self.grid.set(x, y, CellType.EMPTY)
+            if self.grid.clear_wall(x, y):
+                removed_count += 1
+
+        actual_remaining_count = self._count_wall_cells()
+        environment_hidden = LayerId.RESOURCES not in self.layer_manager.get_renderable_layers()
+        self.wall_delete_notice = (
+            f"W pressed: stage {self.wall_delete_stage}/3, "
+            f"removed {removed_count}, remaining {actual_remaining_count}"
+        )
+        if environment_hidden:
+            self.wall_delete_notice += " (Environment layer hidden)"
+        print(
+            "[walls] stage=%d before=%d removed=%d remaining=%d env_visible=%s"
+            % (
+                self.wall_delete_stage,
+                before_count,
+                removed_count,
+                actual_remaining_count,
+                str(not environment_hidden).lower(),
+            )
+        )
+
+    def _count_wall_cells(self) -> int:
+        """Return current number of wall cells in the mixed board view."""
+        return sum(
+            1
+            for y in range(self.grid.height)
+            for x in range(self.grid.width)
+            if self.grid.get(x, y) == CellType.WALL
+        )

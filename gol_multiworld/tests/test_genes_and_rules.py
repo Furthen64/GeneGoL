@@ -33,3 +33,12 @@ def test_wall_tiles_are_immutable_for_non_wall_writes() -> None:
 
     grid.set(2, 2, CellType.FOOD)
     assert grid.get(2, 2) == CellType.WALL
+
+
+def test_clear_wall_bypasses_wall_immutability_guard() -> None:
+    grid = Grid(6, 6)
+    grid.set(2, 2, CellType.WALL)
+    assert grid.get(2, 2) == CellType.WALL
+
+    assert grid.clear_wall(2, 2) is True
+    assert grid.get(2, 2) == CellType.EMPTY

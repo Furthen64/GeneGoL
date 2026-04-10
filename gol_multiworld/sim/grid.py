@@ -6,7 +6,7 @@ import random
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
-from gol_multiworld.sim.layers import LayerId, LayerState, LegacyBoardAdapter
+from gol_multiworld.sim.layers import LayerId, LayerState, LegacyBoardAdapter, ResourceType
 
 
 class Grid:
@@ -37,6 +37,18 @@ class Grid:
         """Set the cell type at (x, y). Ignores out-of-bounds writes."""
         if 0 <= x < self.width and 0 <= y < self.height:
             self._legacy_board.set(x, y, value)
+
+    def clear_wall(self, x: int, y: int) -> bool:
+        """Force-clear a wall tile at (x, y), bypassing wall immutability guard.
+
+        Returns ``True`` when a wall was present and removed; otherwise ``False``.
+        """
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return False
+        if self.layers.resourceGrid[y][x] != ResourceType.WALL:
+            return False
+        self.layers.resourceGrid[y][x] = ResourceType.NONE
+        return True
 
     def clone(self) -> "Grid":
         """Return a deep copy of this grid (used for double-buffering)."""
