@@ -94,6 +94,11 @@ class LegacyBoardAdapter:
     def set(self, x: int, y: int, value: int) -> None:
         if not self._in_bounds(x, y):
             return
+        if (
+            self.layers.resourceGrid[y][x] == ResourceType.WALL
+            and value != CellType.WALL
+        ):
+            return
 
         if value == CellType.WALL:
             self.layers.resourceGrid[y][x] = ResourceType.WALL

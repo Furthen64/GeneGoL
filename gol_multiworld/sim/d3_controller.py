@@ -13,6 +13,7 @@ from gol_multiworld.sim.debug_trace import (
     is_adjacent_to_organism_boundary,
 )
 from gol_multiworld.sim.grid import Grid
+from gol_multiworld.sim.layers import ResourceType
 from gol_multiworld.sim.organism_detection import Organism
 
 # 8-connected offsets
@@ -30,6 +31,7 @@ _TOXIC_INVERSE_PENALTY = 0.5 # Numerator for 1/dist toxic repulsion
 
 # Default food search radius in cells around the organism centroid
 _DEFAULT_FOOD_SEARCH_RADIUS = 10
+_LOCAL_ENV_RADIUS = 2
 
 
 def d3_tick(
@@ -77,10 +79,23 @@ def d3_tick(
         if org.size < min_size:
             continue  # tiny clusters get no D3
 
-        food_writes = _handle_food(grid, org, debugger)
+        phenotype = org.gene.derive_phenotype()
+        org.phenotype = phenotype
+        local_env = _sample_local_environment(grid, org, _LOCAL_ENV_RADIUS)
+
+        food_writes = _handle_food(grid, org, phenotype.resource_appetite, debugger)
         _handle_toxic(grid, org, tick, tox_memory_ticks)
-        _decay_bad_zones(org, tick)
-        guided_write = _apply_steering(grid, org, tick, d3_weight, rng, rules, debugger)
+        _decay_bad_zones(org, tick, phenotype.decay_tolerance)
+        guided_write = _apply_steering(
+            grid,
+            org,
+            tick,
+            d3_weight,
+            rng,
+            rules,
+            local_env,
+            debugger,
+        )
         if debugger is not None:
             allowed_writes = len(food_writes) + 1
             if explicit_max_writes is not None:
@@ -100,9 +115,11 @@ def d3_tick(
 def _handle_food(
     grid: Grid,
     org: Organism,
+    appetite: float,
     debugger: BirthCauseTracer | None = None,
 ) -> set[tuple[int, int]]:
     """Convert food cells adjacent to organism cells into Live cells."""
+    max_conversions = max(1, int(1 + appetite * 3))
     new_live: set[tuple[int, int]] = set()
     for cx, cy in list(org.cells):
         for dx, dy in _NEIGHBOR_OFFSETS:
@@ -124,6 +141,9 @@ def _handle_food(
                     )
                 grid.set(nx, ny, CellType.LIVE)
                 new_live.add((nx, ny))
+                if len(new_live) >= max_conversions:
+                    org.cells.update(new_live)
+                    return new_live
     org.cells.update(new_live)
     return new_live
 
@@ -143,9 +163,12 @@ def _handle_toxic(
                 org.bad_zones[(nx, ny)] = tick + memory_ticks
 
 
-def _decay_bad_zones(org: Organism, tick: int) -> None:
+def _decay_bad_zones(org: Organism, tick: int, decay_tolerance: float) -> None:
     """Remove expired bad-zone entries."""
-    expired = [pos for pos, exp in org.bad_zones.items() if exp <= tick]
+    grace_ticks = int(1 + decay_tolerance * 5)
+    expired = [
+        pos for pos, exp in org.bad_zones.items() if exp + grace_ticks <= tick
+    ]
     for pos in expired:
         del org.bad_zones[pos]
 
@@ -161,6 +184,7 @@ def _apply_steering(
     d3_weight: float,
     rng: random.Random,
     rules: dict[str, Any],
+    local_env: dict[str, float],
     debugger: BirthCauseTracer | None = None,
 ) -> tuple[int, int] | None:
     """Gently bias the organism's growth direction.
@@ -185,13 +209,24 @@ def _apply_steering(
         return None
 
     # Only act with probability d3_weight (keep D2 dominant)
-    if rng.random() > d3_weight:
+    action_weight = d3_weight * (0.25 + (0.75 * org.phenotype.guidance_strength))
+    if rng.random() > action_weight:
         return None
 
     # Score each candidate
     food_positions = _nearby_food(grid, org)
     scored = [
-        (_score_candidate(nx, ny, org, food_positions, grid), (nx, ny))
+        (
+            _score_candidate(
+                nx,
+                ny,
+                org,
+                food_positions,
+                grid,
+                local_env,
+            ),
+            (nx, ny),
+        )
         for (nx, ny) in sorted(candidates, key=lambda pos: (pos[1], pos[0]))
     ]
     scored.sort(key=lambda item: (-item[0], item[1][1], item[1][0]))
@@ -227,6 +262,7 @@ def _score_candidate(
     org: Organism,
     food_positions: list[tuple[int, int]],
     grid: Grid,
+    local_env: dict[str, float],
 ) -> float:
     """Score a candidate growth cell.
 
@@ -243,10 +279,21 @@ def _score_candidate(
 
     for (bx, by) in org.bad_zones:
         dist = abs(cx - bx) + abs(cy - by)
+        resistance = org.phenotype.toxin_resistance if org.phenotype else 0.0
+        resistance_factor = max(0.1, 1.0 - resistance)
         if dist == 0:
-            score -= _TOXIC_DIRECT_PENALTY
+            score -= _TOXIC_DIRECT_PENALTY * resistance_factor
         else:
-            score -= _TOXIC_INVERSE_PENALTY / dist
+            score -= (_TOXIC_INVERSE_PENALTY / dist) * resistance_factor
+
+    wall_density = local_env.get("wall_density", 0.0)
+    toxin_density = local_env.get("toxin_density", 0.0)
+    food_density = local_env.get("food_density", 0.0)
+    appetite = org.phenotype.resource_appetite if org.phenotype else 0.5
+    resistance = org.phenotype.toxin_resistance if org.phenotype else 0.0
+    score += food_density * (0.5 + appetite)
+    score -= toxin_density * (1.0 - resistance)
+    score -= wall_density * 0.25
 
     return score
 
@@ -263,3 +310,37 @@ def _nearby_food(
             if grid.get(x, y) == CellType.FOOD:
                 food.append((x, y))
     return food
+
+
+def _sample_local_environment(
+    grid: Grid,
+    org: Organism,
+    radius: int,
+) -> dict[str, float]:
+    """Read environment-layer values around the organism centroid."""
+    cx, cy = org.centroid()
+    start_x = max(0, int(cx) - radius)
+    end_x = min(grid.width - 1, int(cx) + radius)
+    start_y = max(0, int(cy) - radius)
+    end_y = min(grid.height - 1, int(cy) + radius)
+    sample_count = max(1, (end_x - start_x + 1) * (end_y - start_y + 1))
+
+    layer_state = grid.get_layer_state()
+    food = 0
+    toxin = 0
+    wall = 0
+    for y in range(start_y, end_y + 1):
+        for x in range(start_x, end_x + 1):
+            value = layer_state.resourceGrid[y][x]
+            if value == ResourceType.FOOD:
+                food += 1
+            elif value == ResourceType.TOXIN:
+                toxin += 1
+            elif value == ResourceType.WALL:
+                wall += 1
+
+    return {
+        "food_density": food / sample_count,
+        "toxin_density": toxin / sample_count,
+        "wall_density": wall / sample_count,
+    }

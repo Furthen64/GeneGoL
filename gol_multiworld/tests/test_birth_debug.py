@@ -64,12 +64,19 @@ def test_d3_guided_growth_is_logged() -> None:
 
     rules = _rules(d3GuidanceWeight=1.0)
     organisms = detect_organisms(grid, tick=0, previous=[], rules=rules)
+    organisms[0].gene.guidance_locus = 1.0
     tracer = BirthCauseTracer(enabled=True)
     tracer.begin_tick(0, grid)
     updated = d3_tick(grid, organisms, tick=0, rules=rules, rng=random.Random(0), debugger=tracer)
     tracer.finalize_tick(updated)
 
-    record = tracer.live_births[(7, 5)]
+    guided_records = [
+        birth
+        for birth in tracer.live_births.values()
+        if birth.cause == D3_GUIDED_GROWTH
+    ]
+    assert guided_records, "Expected one D3 guided growth birth record"
+    record = guided_records[0]
     assert record.cause == D3_GUIDED_GROWTH
     assert record.phase == "D3"
     assert record.source_organism_id == organisms[0].organism_id
