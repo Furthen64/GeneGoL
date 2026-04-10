@@ -492,33 +492,15 @@ class App:
 
         removed_count = 0
         for x, y in walls_to_remove:
-            if self.grid.clear_wall(x, y):
-                removed_count += 1
+            self.grid.set(x, y, CellType.EMPTY)
 
-        actual_remaining_count = self._count_wall_cells()
-        environment_hidden = LayerId.RESOURCES not in self.layer_manager.get_renderable_layers()
+        removed_count = len(walls_to_remove)
+        remaining_count = max(0, before_count - removed_count)
         self.wall_delete_notice = (
             f"W pressed: stage {self.wall_delete_stage}/3, "
-            f"removed {removed_count}, remaining {actual_remaining_count}"
+            f"removed {removed_count}, remaining {remaining_count}"
         )
-        if environment_hidden:
-            self.wall_delete_notice += " (Environment layer hidden)"
         print(
-            "[walls] stage=%d before=%d removed=%d remaining=%d env_visible=%s"
-            % (
-                self.wall_delete_stage,
-                before_count,
-                removed_count,
-                actual_remaining_count,
-                str(not environment_hidden).lower(),
-            )
-        )
-
-    def _count_wall_cells(self) -> int:
-        """Return current number of wall cells in the mixed board view."""
-        return sum(
-            1
-            for y in range(self.grid.height)
-            for x in range(self.grid.width)
-            if self.grid.get(x, y) == CellType.WALL
+            "[walls] stage=%d before=%d removed=%d remaining=%d"
+            % (self.wall_delete_stage, before_count, removed_count, remaining_count)
         )
