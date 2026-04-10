@@ -12,6 +12,7 @@ from gol_multiworld.sim.layers import LayerId
 
 BlendMode = Literal["normal", "multiply", "add"]
 StorageScope = Literal["session", "local"]
+ViewPreset = Literal["Ecology", "Genetics", "Structure"]
 
 
 @dataclass
@@ -23,6 +24,41 @@ class LayerViewModel:
     blendMode: BlendMode = "normal"
     solo: bool = False
     locked: bool = False
+
+
+_LAYER_LABELS: dict[LayerId, str] = {
+    LayerId.BASE_TILES: "Base",
+    LayerId.RESOURCES: "Environment",
+    LayerId.ORGANISMS: "Organisms",
+    LayerId.GENES: "Genes",
+}
+
+_LAYER_GROUPS: dict[str, list[LayerId]] = {
+    "Group A: Simulation substrate": [LayerId.BASE_TILES],
+    "Group B: Environment": [LayerId.RESOURCES],
+    "Group C: Biology/Genes": [LayerId.ORGANISMS, LayerId.GENES],
+}
+
+_PRESET_VISIBILITY: dict[ViewPreset, dict[LayerId, bool]] = {
+    "Ecology": {
+        LayerId.BASE_TILES: False,
+        LayerId.RESOURCES: True,
+        LayerId.ORGANISMS: True,
+        LayerId.GENES: False,
+    },
+    "Genetics": {
+        LayerId.BASE_TILES: False,
+        LayerId.RESOURCES: False,
+        LayerId.ORGANISMS: True,
+        LayerId.GENES: True,
+    },
+    "Structure": {
+        LayerId.BASE_TILES: True,
+        LayerId.RESOURCES: True,
+        LayerId.ORGANISMS: False,
+        LayerId.GENES: False,
+    },
+}
 
 
 class LayerManager:
@@ -49,6 +85,12 @@ class LayerManager:
         self._save()
         return vm.visible
 
+    def set_visibility(self, layer_id: LayerId, visible: bool) -> bool:
+        """Set and persist visibility for a layer."""
+        self.layers[layer_id].visible = visible
+        self._save()
+        return visible
+
     def set_opacity(self, layer_id: LayerId, opacity: float) -> float:
         """Set and persist opacity for a layer in [0, 1]."""
         clamped = max(0.0, min(1.0, float(opacity)))
@@ -62,11 +104,50 @@ class LayerManager:
         self._save()
         return solo
 
+    def toggle_solo(self, layer_id: LayerId) -> bool:
+        """Toggle and persist solo state for a layer."""
+        vm = self.layers[layer_id]
+        vm.solo = not vm.solo
+        self._save()
+        return vm.solo
+
     def set_locked(self, layer_id: LayerId, locked: bool) -> bool:
         """Set and persist editing lock for a layer."""
         self.layers[layer_id].locked = locked
         self._save()
         return locked
+
+    def toggle_locked(self, layer_id: LayerId) -> bool:
+        """Toggle and persist editing lock state for a layer."""
+        vm = self.layers[layer_id]
+        vm.locked = not vm.locked
+        self._save()
+        return vm.locked
+
+    def apply_preset(self, preset_name: ViewPreset) -> None:
+        """Apply a named visibility preset and clear solo mode."""
+        for layer_id, visible in _PRESET_VISIBILITY[preset_name].items():
+            vm = self.layers[layer_id]
+            vm.visible = visible
+            vm.solo = False
+        self._save()
+
+    def toggle_group_visibility(self, group_name: str) -> bool:
+        """Toggle all layer visibilities in a group. Returns new common visibility."""
+        group = _LAYER_GROUPS[group_name]
+        target_visible = not all(self.layers[layer_id].visible for layer_id in group)
+        for layer_id in group:
+            self.layers[layer_id].visible = target_visible
+        self._save()
+        return target_visible
+
+    def layer_label(self, layer_id: LayerId) -> str:
+        """Human-readable label for UI rows."""
+        return _LAYER_LABELS[layer_id]
+
+    def groups(self) -> dict[str, list[LayerId]]:
+        """Layer grouping metadata for UI organization."""
+        return {name: list(ids) for name, ids in _LAYER_GROUPS.items()}
 
     def get_renderable_layers(self) -> list[LayerId]:
         """Return layer ids that should be rendered in draw order."""
