@@ -26,7 +26,7 @@ from gol_multiworld.ui.controls import Controls
 from gol_multiworld.ui.gif_recorder import GifRecorder, MAX_RECORD_SECONDS
 from gol_multiworld.ui.layer_manager import LayerManager, getRenderableLayers
 from gol_multiworld.ui.overlays import draw_grid_lines, draw_key_help
-from gol_multiworld.ui.renderer import Renderer
+from gol_multiworld.ui.renderer import GeneOverlayConfig, Renderer
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -148,6 +148,12 @@ class App:
                     self.grid.get_layer_state(),
                     renderable_layers,
                     self.organisms,
+                    layer_view_models=self.layer_manager.layers,
+                    gene_overlay=GeneOverlayConfig(
+                        enabled=LayerId.GENES in renderable_layers,
+                        mode="trait_tint",
+                        trait_name="aggression",
+                    ),
                 )
                 if self.cell_size >= 4:
                     draw_grid_lines(
@@ -203,20 +209,11 @@ class App:
     def _draw_legend_panel(self, panel_x: int, panel_y: int) -> None:
         """Draw a legend for cell colors and their meanings."""
         font = self.font
-        legend = [
-            ("EMPTY", (20, 20, 30)),
-            ("LIVE", (100, 220, 100)),
-            ("FOOD", (220, 200, 50)),
-            ("WALL", (120, 120, 130)),
-            ("TOXIC", (200, 50, 180)),
-        ]
         labels = [
             ("Empty", (20, 20, 30)),
             ("Organism cell", (100, 220, 100)),
             ("Non-organism live", (25, 90, 25)),
-            ("Food", (220, 200, 50)),
-            ("Wall", (120, 120, 130)),
-            ("Toxic", (200, 50, 180)),
+            *self.renderer.environment_legend(),
         ]
         line_h = font.get_height() + 2
         panel_w = 220
