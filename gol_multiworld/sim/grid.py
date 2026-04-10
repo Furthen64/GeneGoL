@@ -6,17 +6,22 @@ import random
 from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
+from gol_multiworld.sim.layers import LayerId, LayerState, LegacyBoardAdapter
 
 
 class Grid:
-    """2D grid of CellType values supporting double-buffering for D2 updates."""
+    """2D grid facade backed by explicit layer containers."""
 
     def __init__(self, width: int, height: int) -> None:
         self.width = width
         self.height = height
-        self._cells: list[list[int]] = [
-            [CellType.EMPTY] * width for _ in range(height)
-        ]
+        self.layers = LayerState(width, height)
+        self._legacy_board = LegacyBoardAdapter(self.layers)
+
+    @property
+    def _cells(self) -> list[list[int]]:
+        """Legacy mixed-board snapshot for compatibility with older code paths."""
+        return self._legacy_board.as_mixed_board()
 
     # ------------------------------------------------------------------
     # Access helpers
@@ -25,19 +30,50 @@ class Grid:
     def get(self, x: int, y: int) -> int:
         """Return the cell type at (x, y) or EMPTY if out of bounds."""
         if 0 <= x < self.width and 0 <= y < self.height:
-            return self._cells[y][x]
+            return self._legacy_board.get(x, y)
         return CellType.EMPTY
 
     def set(self, x: int, y: int, value: int) -> None:
         """Set the cell type at (x, y). Ignores out-of-bounds writes."""
         if 0 <= x < self.width and 0 <= y < self.height:
-            self._cells[y][x] = value
+            self._legacy_board.set(x, y, value)
 
     def clone(self) -> "Grid":
         """Return a deep copy of this grid (used for double-buffering)."""
         new_grid = Grid(self.width, self.height)
-        new_grid._cells = [row[:] for row in self._cells]
+        new_grid.layers = self.layers.clone()
+        new_grid._legacy_board = LegacyBoardAdapter(new_grid.layers)
         return new_grid
+
+
+    # ------------------------------------------------------------------
+    # Layer queries
+    # ------------------------------------------------------------------
+
+    def get_layer_state(self) -> LayerState:
+        """Return full layer state object for independent subsystem queries."""
+        return self.layers
+
+    def get_layer_grid(self, layer_id: LayerId) -> Any:
+        """Return a specific layer container by registered layer id."""
+        if layer_id == LayerId.BASE_TILES:
+            return self.layers.baseTilesGrid
+        if layer_id == LayerId.RESOURCES:
+            return self.layers.resourceGrid
+        if layer_id == LayerId.ORGANISMS:
+            return self.layers.organismGrid
+        if layer_id == LayerId.GENES:
+            return self.layers.geneStore
+        raise ValueError(f"Unknown layer id: {layer_id}")
+
+    def set_organism_cell(self, x: int, y: int, organism_id: int) -> None:
+        """Set organism occupancy in the organism layer only."""
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.layers.organismGrid[y][x] = organism_id
+
+    def set_gene_store(self, gene_store: dict[int, Any]) -> None:
+        """Replace gene layer data (indexed by organism id)."""
+        self.layers.geneStore = dict(gene_store)
 
     # ------------------------------------------------------------------
     # World generation
@@ -68,15 +104,15 @@ class Grid:
 
         for y in range(self.height):
             for x in range(self.width):
-                if self._cells[y][x] == CellType.WALL:
+                if self.get(x, y) == CellType.WALL:
                     continue
                 r = rng.random()
                 if r < food_density:
-                    self._cells[y][x] = CellType.FOOD
+                    self.set(x, y, CellType.FOOD)
                 elif r < food_density + live_density:
-                    self._cells[y][x] = CellType.LIVE
+                    self.set(x, y, CellType.LIVE)
                 else:
-                    self._cells[y][x] = CellType.EMPTY
+                    self.set(x, y, CellType.EMPTY)
 
         self._seed_toxic_clusters(rng, rules)
 
@@ -84,7 +120,7 @@ class Grid:
         """Reset all cells to EMPTY."""
         for y in range(self.height):
             for x in range(self.width):
-                self._cells[y][x] = CellType.EMPTY
+                self.set(x, y, CellType.EMPTY)
 
     def _seed_toxic_clusters(self, rng: random.Random, rules: dict[str, Any]) -> None:
         toxic_config = rules.get("toxicSpawnClusters", {})
@@ -101,7 +137,7 @@ class Grid:
                 continue
             occupied.update(cluster)
             for x, y in cluster:
-                self._cells[y][x] = CellType.TOXIC
+                self.set(x, y, CellType.TOXIC)
 
     def _build_toxic_cluster(
         self,
@@ -157,7 +193,7 @@ class Grid:
         y: int,
         occupied: set[tuple[int, int]],
     ) -> bool:
-        if self._cells[y][x] == CellType.WALL or (x, y) in occupied:
+        if self.get(x, y) == CellType.WALL or (x, y) in occupied:
             return False
         return all((nx, ny) not in occupied for nx, ny in _neighbor_positions(x, y))
 
@@ -168,7 +204,7 @@ class Grid:
         cluster: set[tuple[int, int]],
         occupied: set[tuple[int, int]],
     ) -> bool:
-        if self._cells[y][x] == CellType.WALL or (x, y) in occupied or (x, y) in cluster:
+        if self.get(x, y) == CellType.WALL or (x, y) in occupied or (x, y) in cluster:
             return False
         for nx, ny in _neighbor_positions(x, y):
             if (nx, ny) in occupied and (nx, ny) not in cluster:

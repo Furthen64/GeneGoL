@@ -14,6 +14,7 @@ from gol_multiworld.sim.d2_update import d2_update
 from gol_multiworld.sim.d3_controller import d3_tick
 from gol_multiworld.sim.debug_trace import BirthCauseTracer
 from gol_multiworld.sim.grid import Grid
+from gol_multiworld.sim.layers import LayerId
 from gol_multiworld.sim.organism_detection import (
     Organism,
     cull_stagnating_organisms,
@@ -102,6 +103,7 @@ class App:
         self.controls = Controls()
         self.recorder = GifRecorder(GIF_OUTPUT_DIR)
         self.recording_notice: str | None = None
+        self._sync_layer_registry()
 
     # ------------------------------------------------------------------
     # Main loop
@@ -241,13 +243,13 @@ class App:
     # ------------------------------------------------------------------
 
     def _advance(self) -> None:
-        """Run one full simulation tick."""
+        """Run one full simulation tick with explicit layer-update ordering."""
         self.debugger.begin_tick(self.tick, self.grid)
 
-        # 1. D2 update
+        # 1) Environment diffusion/decay (resource and substrate effects).
         self.grid = d2_update(self.grid, self.rules, self.rng, self.debugger)
 
-        # 2. D3 detect organisms
+        # 2) Organism decisions from genes (detect living clusters and carry gene state).
         self.organisms = detect_organisms(
             self.grid,
             self.tick,
@@ -260,7 +262,7 @@ class App:
             self.grid, self.organisms, self.rules
         )
 
-        # 3 & 4 & 5. D3 food, toxic, steering
+        # 3) Movement/consumption/reproduction style actions (D3 controller).
         self.grid = d3_tick(
             self.grid,
             self.organisms,
@@ -270,9 +272,26 @@ class App:
             self.debugger,
         )
 
-        self.debugger.finalize_tick(self.grid)
+        # Sync independent layer containers for renderer/UI and migration adapters.
+        self._sync_layer_registry()
 
+        self.debugger.finalize_tick(self.grid)
         self.tick += 1
+
+    def _sync_layer_registry(self) -> None:
+        """Refresh organism and gene layers from detected organisms."""
+        organism_layer = self.grid.get_layer_grid(LayerId.ORGANISMS)
+        for y in range(self.grid.height):
+            for x in range(self.grid.width):
+                organism_layer[y][x] = 0
+
+        gene_store: dict[int, Any] = {}
+        for org in self.organisms:
+            gene_store[org.organism_id] = org.gene
+            for x, y in org.cells:
+                self.grid.set_organism_cell(x, y, org.organism_id)
+
+        self.grid.set_gene_store(gene_store)
 
     def _reload_rules(self) -> None:
         """Hot-reload the rules JSON file."""
@@ -302,6 +321,7 @@ class App:
         self.grid = Grid(self.grid_w, self.grid_h)
         generate_walls(self.grid, self.rules, random.Random(new_seed))
         self.grid.randomize(self.rules, seed=new_seed)
+        self._sync_layer_registry()
 
     def _start_recording(self) -> None:
         """Begin capturing frames for GIF export."""
