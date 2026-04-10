@@ -99,3 +99,25 @@ def test_none_mode_leaves_grid_without_walls() -> None:
         for y in range(grid.height)
         for x in range(grid.width)
     )
+
+
+def test_clear_wall_bypasses_wall_immutability_guard() -> None:
+    grid = Grid(10, 10)
+    generate_walls(grid, RULES, random.Random(3))
+
+    wall_cells = [
+        (x, y)
+        for y in range(grid.height)
+        for x in range(grid.width)
+        if grid.get(x, y) == CellType.WALL
+    ]
+    assert wall_cells
+    x, y = wall_cells[0]
+
+    # Legacy set() intentionally preserves walls.
+    grid.set(x, y, CellType.EMPTY)
+    assert grid.get(x, y) == CellType.WALL
+
+    # clear_wall() is the explicit "force remove" path used by wall deletion.
+    assert grid.clear_wall(x, y) is True
+    assert grid.get(x, y) == CellType.EMPTY
