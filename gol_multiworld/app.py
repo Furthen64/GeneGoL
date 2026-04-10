@@ -24,6 +24,7 @@ from gol_multiworld.sim.rules_engine import load_rules
 from gol_multiworld.sim.wall_generator import generate_walls
 from gol_multiworld.ui.controls import Controls
 from gol_multiworld.ui.gif_recorder import GifRecorder, MAX_RECORD_SECONDS
+from gol_multiworld.ui.layer_manager import LayerManager, getRenderableLayers
 from gol_multiworld.ui.overlays import draw_grid_lines, draw_key_help
 from gol_multiworld.ui.renderer import Renderer
 
@@ -103,6 +104,7 @@ class App:
         self.controls = Controls()
         self.recorder = GifRecorder(GIF_OUTPUT_DIR)
         self.recording_notice: str | None = None
+        self.layer_manager = LayerManager()
         self._sync_layer_registry()
 
     # ------------------------------------------------------------------
@@ -141,7 +143,12 @@ class App:
 
                 # Draw
                 self.screen.fill((20, 20, 30))
-                self.renderer.draw_grid(self.grid, self.organisms)
+                renderable_layers = getRenderableLayers(self.layer_manager)
+                self.renderer.draw_layers(
+                    self.grid.get_layer_state(),
+                    renderable_layers,
+                    self.organisms,
+                )
                 if self.cell_size >= 4:
                     draw_grid_lines(
                         self.screen,
@@ -150,12 +157,13 @@ class App:
                         0,
                         0,
                     )
-                self.renderer.draw_overlays(
-                    self.organisms,
-                    self.tick,
-                    show_ids=self.show_ids,
-                    show_vectors=self.show_vectors,
-                )
+                if LayerId.ORGANISMS in renderable_layers:
+                    self.renderer.draw_overlays(
+                        self.organisms,
+                        self.tick,
+                        show_ids=self.show_ids,
+                        show_vectors=self.show_vectors,
+                    )
 
                 panel_x = WINDOW_WIDTH - PANEL_WIDTH
                 self.renderer.draw_status(
@@ -228,6 +236,10 @@ class App:
     def _status_lines(self) -> list[str]:
         """Build extra status text for the debug panel."""
         lines = [f"FPS: {self.fps}"]
+        lines.append(
+            "Renderable: "
+            + ",".join(layer_id.name for layer_id in self.layer_manager.get_renderable_layers())
+        )
         if self.debugger.enabled:
             lines.append(f"BirthDebug: on ({self.debugger.violation_count} errs)")
         if self.recorder.is_recording:
