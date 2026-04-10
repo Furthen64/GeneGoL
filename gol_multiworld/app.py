@@ -95,6 +95,8 @@ class App:
         self.show_ids: bool = True
         self.show_vectors: bool = False
         self.wall_delete_stage: int = 0
+        self.inspected_tile: tuple[int, int] | None = None
+        self.inspected_organism_id: int | None = None
 
         self.renderer = Renderer(
             self.screen,
@@ -139,6 +141,8 @@ class App:
                     self._start_recording()
                 if self.controls.stop_recording:
                     self._stop_recording()
+                if self.controls.clicked_cell_pixel is not None:
+                    self._inspect_click(self.controls.clicked_cell_pixel)
 
                 self._handle_layer_shortcuts_and_panel_events()
 
@@ -251,6 +255,58 @@ class App:
             )
         elif self.recording_notice:
             lines.append(self.recording_notice)
+        lines.extend(self._inspector_lines())
+        return lines
+
+    def _inspector_lines(self) -> list[str]:
+        lines: list[str] = []
+        if self.inspected_tile is not None:
+            tx, ty = self.inspected_tile
+            tile = self._tile_debug_snapshot(tx, ty)
+            lines.append(f"Tile({tx},{ty}) base={tile['base']}")
+            lines.append(
+                "  res={res} occ={occ}".format(
+                    res=tile["resource"],
+                    occ=tile["occupant"],
+                )
+            )
+            lines.append(f"  mixed={tile['mixed_cell_type']}")
+
+        if self.inspected_organism_id is not None:
+            org = next(
+                (o for o in self.organisms if o.organism_id == self.inspected_organism_id),
+                None,
+            )
+            if org is not None:
+                phenotype = org.phenotype or org.gene.derive_phenotype()
+                lines.append(f"Org#{org.organism_id} size={org.size} age={org.survival_time(self.tick)}")
+                lines.append(
+                    "  loci gcap={:.2f} guide={:.2f} tox={:.2f}".format(
+                        org.gene.growth_cap_locus,
+                        org.gene.guidance_locus,
+                        org.gene.toxin_resistance_locus,
+                    )
+                )
+                lines.append(
+                    "  loci app={:.2f} decay={:.2f}".format(
+                        org.gene.appetite_locus,
+                        org.gene.decay_tolerance_locus,
+                    )
+                )
+                lines.append(
+                    "  pheno max={} steer={:.2f} toxR={:.2f}".format(
+                        phenotype.max_cells,
+                        phenotype.guidance_strength,
+                        phenotype.toxin_resistance,
+                    )
+                )
+                lines.append(
+                    "  pheno app={:.2f} decay={:.2f} bad={}".format(
+                        phenotype.resource_appetite,
+                        phenotype.decay_tolerance,
+                        len(org.bad_zones),
+                    )
+                )
         return lines
 
     # ------------------------------------------------------------------
@@ -280,6 +336,29 @@ class App:
                 self.layer_manager.apply_preset("Genetics")
             elif event.key == pygame.K_3:
                 self.layer_manager.apply_preset("Structure")
+
+    def _inspect_click(self, pixel_pos: tuple[int, int]) -> None:
+        px, py = pixel_pos
+        gx = (px - self.renderer.grid_offset_x) // self.cell_size
+        gy = (py - self.renderer.grid_offset_y) // self.cell_size
+        if gx < 0 or gy < 0 or gx >= self.grid.width or gy >= self.grid.height:
+            return
+
+        self.inspected_tile = (gx, gy)
+        clicked = next(
+            (org for org in self.organisms if (gx, gy) in org.cells),
+            None,
+        )
+        self.inspected_organism_id = clicked.organism_id if clicked else None
+
+    def _tile_debug_snapshot(self, x: int, y: int) -> dict[str, int]:
+        layer_state = self.grid.get_layer_state()
+        return {
+            "base": int(layer_state.baseTilesGrid[y][x]),
+            "resource": int(layer_state.resourceGrid[y][x]),
+            "occupant": int(layer_state.organismGrid[y][x]),
+            "mixed_cell_type": int(self.grid.get(x, y)),
+        }
 
     def _advance(self) -> None:
         """Run one full simulation tick with explicit layer-update ordering."""

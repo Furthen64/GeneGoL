@@ -36,6 +36,8 @@ class Controls:
         End GIF recording and save the result.
     events : list[pygame.event.Event]
         Raw event queue from the last poll for other UI components.
+    clicked_cell_pixel : tuple[int, int] | None
+        Mouse pixel coordinate clicked in current frame.
     """
 
     def __init__(self) -> None:
@@ -52,6 +54,7 @@ class Controls:
         self.start_recording: bool = False
         self.stop_recording: bool = False
         self.events: list[pygame.event.Event] = []
+        self.clicked_cell_pixel: tuple[int, int] | None = None
 
     def process_events(self) -> None:
         """Poll all pending pygame events and update state flags."""
@@ -66,6 +69,7 @@ class Controls:
         self.delete_walls = False
         self.start_recording = False
         self.stop_recording = False
+        self.clicked_cell_pixel = None
 
         self.events = pygame.event.get()
         for event in self.events:
@@ -111,6 +115,8 @@ class Controls:
 
                 elif key == pygame.K_ESCAPE or key == pygame.K_q:
                     self.quit = True
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.clicked_cell_pixel = event.pos
 
     def key_help(self) -> list[str]:
         """Return a list of key-binding descriptions for the debug panel."""
@@ -127,5 +133,6 @@ class Controls:
             "[K] stop GIF",
             "[I] toggle IDs",
             "[V] toggle vectors",
+            "[LMB] inspect tile/organism",
             "[Q/ESC] quit",
         ]

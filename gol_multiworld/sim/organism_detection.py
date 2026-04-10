@@ -9,7 +9,7 @@ from typing import Any
 
 from gol_multiworld.sim.cell_types import CellType
 from gol_multiworld.sim.debug_trace import BirthCauseTracer
-from gol_multiworld.sim.genes import Gene
+from gol_multiworld.sim.genes import Gene, Phenotype
 from gol_multiworld.sim.grid import Grid
 
 # 8-connected offsets
@@ -31,6 +31,7 @@ class Organism:
     birth_tick: int
     last_seen_tick: int
     gene: Gene = field(default_factory=Gene)
+    phenotype: Phenotype | None = None
     bad_zones: dict[tuple[int, int], int] = field(default_factory=dict)
     last_centroid: tuple[float, float] | None = None
     travel_distance: float = 0.0
@@ -39,6 +40,8 @@ class Organism:
     def __post_init__(self) -> None:
         if self.last_centroid is None and self.cells:
             self.last_centroid = _centroid_for_cells(self.cells)
+        if self.phenotype is None:
+            self.phenotype = self.gene.derive_phenotype()
 
     @property
     def size(self) -> int:
@@ -171,6 +174,7 @@ def detect_organisms(
             birth_tick=birth,
             last_seen_tick=tick,
             gene=gene,
+            phenotype=gene.derive_phenotype(),
             bad_zones=bad_zones,
             last_centroid=cluster_centroid,
             travel_distance=travel_distance,
