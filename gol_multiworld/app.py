@@ -492,9 +492,9 @@ class App:
 
         removed_count = 0
         for x, y in walls_to_remove:
-            if self.grid.clear_wall(x, y):
-                removed_count += 1
+            self.grid.set(x, y, CellType.EMPTY)
 
+        removed_count = len(walls_to_remove)
         remaining_count = max(0, before_count - removed_count)
         self.wall_delete_notice = (
             f"W pressed: stage {self.wall_delete_stage}/3, "
