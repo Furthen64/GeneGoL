@@ -34,6 +34,8 @@ class Controls:
         Begin GIF recording.
     stop_recording : bool
         End GIF recording and save the result.
+    events : list[pygame.event.Event]
+        Raw event queue from the last poll for other UI components.
     """
 
     def __init__(self) -> None:
@@ -49,6 +51,7 @@ class Controls:
         self.delete_walls: bool = False
         self.start_recording: bool = False
         self.stop_recording: bool = False
+        self.events: list[pygame.event.Event] = []
 
     def process_events(self) -> None:
         """Poll all pending pygame events and update state flags."""
@@ -64,7 +67,8 @@ class Controls:
         self.start_recording = False
         self.stop_recording = False
 
-        for event in pygame.event.get():
+        self.events = pygame.event.get()
+        for event in self.events:
             if event.type == pygame.QUIT:
                 self.quit = True
 
@@ -116,6 +120,8 @@ class Controls:
             "[R] reset world",
             "[L] reload rules",
             "[+/-] speed",
+            "[1/2/3] presets",
+            "[Shift+1/2/3] group toggles",
             "[W] delete walls 50/75/100%",
             "[J] start GIF",
             "[K] stop GIF",

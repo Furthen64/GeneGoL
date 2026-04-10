@@ -25,6 +25,7 @@ from gol_multiworld.sim.wall_generator import generate_walls
 from gol_multiworld.ui.controls import Controls
 from gol_multiworld.ui.gif_recorder import GifRecorder, MAX_RECORD_SECONDS
 from gol_multiworld.ui.layer_manager import LayerManager, getRenderableLayers
+from gol_multiworld.ui.layers_panel import LayersPanel
 from gol_multiworld.ui.overlays import draw_grid_lines, draw_key_help
 from gol_multiworld.ui.renderer import GeneOverlayConfig, Renderer
 
@@ -105,6 +106,8 @@ class App:
         self.recorder = GifRecorder(GIF_OUTPUT_DIR)
         self.recording_notice: str | None = None
         self.layer_manager = LayerManager()
+        panel_x = WINDOW_WIDTH - PANEL_WIDTH
+        self.layers_panel = LayersPanel(panel_x, 160, PANEL_WIDTH - 4, self.font)
         self._sync_layer_registry()
 
     # ------------------------------------------------------------------
@@ -136,6 +139,8 @@ class App:
                     self._start_recording()
                 if self.controls.stop_recording:
                     self._stop_recording()
+
+                self._handle_layer_shortcuts_and_panel_events()
 
                 # Advance simulation
                 if not self.controls.paused or self.controls.step_once:
@@ -181,13 +186,14 @@ class App:
                     panel_y=0,
                 )
                 # Draw legend panel below status, above key help
-                self._draw_legend_panel(panel_x=panel_x, panel_y=340)
+                self.layers_panel.draw(self.screen, self.layer_manager)
+                self._draw_legend_panel(panel_x=panel_x, panel_y=430)
                 draw_key_help(
                     self.screen,
                     self.font,
                     self.controls.key_help(),
                     x=panel_x + 4,
-                    y=160,
+                    y=530,
                 )
 
                 pygame.display.flip()
@@ -250,6 +256,30 @@ class App:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _handle_layer_shortcuts_and_panel_events(self) -> None:
+        """Handle panel interactions and keyboard shortcuts for layer controls."""
+        for event in self.controls.events:
+            self.layers_panel.handle_event(event, self.layer_manager)
+            if event.type != pygame.KEYDOWN:
+                continue
+
+            mods = pygame.key.get_mods()
+            if mods & pygame.KMOD_SHIFT:
+                if event.key == pygame.K_1:
+                    self.layer_manager.toggle_group_visibility("Group A: Simulation substrate")
+                elif event.key == pygame.K_2:
+                    self.layer_manager.toggle_group_visibility("Group B: Environment")
+                elif event.key == pygame.K_3:
+                    self.layer_manager.toggle_group_visibility("Group C: Biology/Genes")
+                continue
+
+            if event.key == pygame.K_1:
+                self.layer_manager.apply_preset("Ecology")
+            elif event.key == pygame.K_2:
+                self.layer_manager.apply_preset("Genetics")
+            elif event.key == pygame.K_3:
+                self.layer_manager.apply_preset("Structure")
 
     def _advance(self) -> None:
         """Run one full simulation tick with explicit layer-update ordering."""

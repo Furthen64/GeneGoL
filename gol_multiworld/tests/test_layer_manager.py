@@ -60,3 +60,29 @@ def test_persists_and_loads_saved_view_state(tmp_path: Path) -> None:
     vm = reloaded.layers[LayerId.RESOURCES]
     assert vm.opacity == 0.42
     assert vm.locked is True
+
+
+def test_apply_genetics_preset_updates_visibility(tmp_path: Path) -> None:
+    manager = LayerManager(
+        storage_key="test_preset",
+        storage_scope="session",
+        storage_dir=tmp_path,
+    )
+    manager.apply_preset("Genetics")
+
+    assert manager.layers[LayerId.BASE_TILES].visible is False
+    assert manager.layers[LayerId.RESOURCES].visible is False
+    assert manager.layers[LayerId.ORGANISMS].visible is True
+    assert manager.layers[LayerId.GENES].visible is True
+
+
+def test_group_toggle_updates_all_group_layers(tmp_path: Path) -> None:
+    manager = LayerManager(
+        storage_key="test_group_toggle",
+        storage_scope="session",
+        storage_dir=tmp_path,
+    )
+    manager.toggle_group_visibility("Group C: Biology/Genes")
+
+    assert manager.layers[LayerId.ORGANISMS].visible is False
+    assert manager.layers[LayerId.GENES].visible is False
