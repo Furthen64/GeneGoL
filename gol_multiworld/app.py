@@ -490,6 +490,7 @@ class App:
         else:
             walls_to_remove = wall_cells
 
+        removed_count = 0
         for x, y in walls_to_remove:
             self.grid.set(x, y, CellType.EMPTY)
 
