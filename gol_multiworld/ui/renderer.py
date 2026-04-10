@@ -8,6 +8,7 @@ import pygame
 
 from gol_multiworld.sim.cell_types import CELL_COLORS, CellType
 from gol_multiworld.sim.grid import Grid
+from gol_multiworld.sim.layers import BaseTile, LayerId, LayerState, ResourceType
 from gol_multiworld.sim.organism_detection import Organism
 
 # Organism overlay colors
@@ -49,21 +50,50 @@ class Renderer:
 
     def draw_grid(self, grid: Grid, organisms: list[Organism] | None = None) -> None:
         """Draw all cells in the grid."""
+        self.draw_layers(
+            grid.get_layer_state(),
+            [layer_id for layer_id in LayerId],
+            organisms=organisms,
+        )
+
+    def draw_layers(
+        self,
+        layer_state: LayerState,
+        renderable_layers: list[LayerId],
+        organisms: list[Organism] | None = None,
+    ) -> None:
+        """Draw selected simulation layers in stable layer order."""
         cs = self.cell_size
         ox, oy = self.grid_offset_x, self.grid_offset_y
         organism_cells = {
             cell for org in organisms or [] for cell in org.cells
         }
-        for y in range(grid.height):
-            for x in range(grid.width):
-                cell = grid.get(x, y)
-                color = CELL_COLORS.get(cell, (0, 0, 0))
-                if cell == CellType.LIVE:
+        renderable = set(renderable_layers)
+
+        for y in range(layer_state.height):
+            for x in range(layer_state.width):
+                color = CELL_COLORS[CellType.EMPTY]
+                if LayerId.BASE_TILES in renderable:
+                    base_tile = layer_state.baseTilesGrid[y][x]
+                    if base_tile == BaseTile.LIVE_SUBSTRATE:
+                        color = _NON_ORGANISM_CELL_COLOR
+
+                if LayerId.RESOURCES in renderable:
+                    resource = layer_state.resourceGrid[y][x]
+                    if resource == ResourceType.FOOD:
+                        color = CELL_COLORS[CellType.FOOD]
+                    elif resource == ResourceType.WALL:
+                        color = CELL_COLORS[CellType.WALL]
+                    elif resource == ResourceType.TOXIN:
+                        color = CELL_COLORS[CellType.TOXIC]
+
+                if LayerId.ORGANISMS in renderable and layer_state.organismGrid[y][x] != 0:
                     color = (
                         _ORGANISM_CELL_COLOR
                         if (x, y) in organism_cells
                         else _NON_ORGANISM_CELL_COLOR
                     )
+
                 rect = pygame.Rect(ox + x * cs, oy + y * cs, cs, cs)
                 pygame.draw.rect(self.surface, color, rect)
 
@@ -163,4 +193,3 @@ class Renderer:
         for i, line in enumerate(lines):
             surf = font.render(line, True, (200, 230, 200))
             self.surface.blit(surf, (panel_x + 4, panel_y + 4 + i * line_h))
-
