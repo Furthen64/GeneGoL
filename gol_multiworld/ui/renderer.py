@@ -81,6 +81,14 @@ class Renderer:
             self._font = pygame.font.SysFont("monospace", max(10, self.cell_size))
         return self._font
 
+    def set_view(self, cell_size: int, grid_offset_x: int, grid_offset_y: int) -> None:
+        """Update zoom/offset view settings used by draw calls."""
+        if self.cell_size != cell_size:
+            self.cell_size = cell_size
+            self._font = None
+        self.grid_offset_x = grid_offset_x
+        self.grid_offset_y = grid_offset_y
+
     # ------------------------------------------------------------------
     # Grid rendering
     # ------------------------------------------------------------------

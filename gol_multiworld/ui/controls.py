@@ -38,6 +38,10 @@ class Controls:
         Raw event queue from the last poll for other UI components.
     clicked_cell_pixel : tuple[int, int] | None
         Mouse pixel coordinate clicked in current frame.
+    pan_delta : tuple[int, int]
+        Mouse drag delta in pixels used to pan the gameboard.
+    zoom_steps : int
+        Mouse-wheel zoom direction for this frame (+in, -out).
     """
 
     def __init__(self) -> None:
@@ -55,6 +59,8 @@ class Controls:
         self.stop_recording: bool = False
         self.events: list[pygame.event.Event] = []
         self.clicked_cell_pixel: tuple[int, int] | None = None
+        self.pan_delta: tuple[int, int] = (0, 0)
+        self.zoom_steps: int = 0
 
     def process_events(self) -> None:
         """Poll all pending pygame events and update state flags."""
@@ -70,6 +76,8 @@ class Controls:
         self.start_recording = False
         self.stop_recording = False
         self.clicked_cell_pixel = None
+        self.pan_delta = (0, 0)
+        self.zoom_steps = 0
 
         self.events = pygame.event.get()
         for event in self.events:
@@ -118,6 +126,14 @@ class Controls:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.clicked_cell_pixel = event.pos
 
+            elif event.type == pygame.MOUSEMOTION and event.buttons[1]:
+                dx, dy = self.pan_delta
+                mx, my = event.rel
+                self.pan_delta = (dx + mx, dy + my)
+
+            elif event.type == pygame.MOUSEWHEEL:
+                self.zoom_steps += event.y
+
     def key_help(self) -> list[str]:
         """Return a list of key-binding descriptions for the debug panel."""
         return [
@@ -134,5 +150,7 @@ class Controls:
             "[I] toggle IDs",
             "[V] toggle vectors",
             "[LMB] inspect tile/organism",
+            "[MMB drag] pan board",
+            "[Mouse wheel] zoom",
             "[Q/ESC] quit",
         ]

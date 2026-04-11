@@ -41,6 +41,8 @@ DEFAULT_RULES_PATH = Path(__file__).parent / "config" / "rules.json"
 DEFAULT_FPS = 10
 MIN_FPS = 1
 MAX_FPS = 60
+MIN_CELL_SIZE = 2
+MAX_CELL_SIZE = 32
 GIF_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "gifs"
 RANDOM_SEED: int | None = None   # Set to an int for deterministic runs
 
@@ -65,6 +67,8 @@ class App:
         self.seed = seed
         self.fps = fps
         self.cell_size = cell_size
+        self.grid_offset_x = 0
+        self.grid_offset_y = 0
 
         # Derived dimensions
         self.grid_w = (WINDOW_WIDTH - PANEL_WIDTH) // cell_size
@@ -100,9 +104,9 @@ class App:
 
         self.renderer = Renderer(
             self.screen,
-            cell_size=cell_size,
-            grid_offset_x=0,
-            grid_offset_y=0,
+            cell_size=self.cell_size,
+            grid_offset_x=self.grid_offset_x,
+            grid_offset_y=self.grid_offset_y,
         )
         self.controls = Controls()
         self.recorder = GifRecorder(GIF_OUTPUT_DIR)
@@ -144,6 +148,11 @@ class App:
                     self._stop_recording()
                 if self.controls.clicked_cell_pixel is not None:
                     self._inspect_click(self.controls.clicked_cell_pixel)
+                if self.controls.pan_delta != (0, 0):
+                    self._pan_view(*self.controls.pan_delta)
+                if self.controls.zoom_steps != 0:
+                    mouse_pos = pygame.mouse.get_pos()
+                    self._zoom_view(self.controls.zoom_steps, mouse_pos)
 
                 self._handle_layer_shortcuts_and_panel_events()
 
@@ -169,9 +178,9 @@ class App:
                     draw_grid_lines(
                         self.screen,
                         self.grid,
-                        self.cell_size,
-                        0,
-                        0,
+                        self.renderer.cell_size,
+                        self.renderer.grid_offset_x,
+                        self.renderer.grid_offset_y,
                     )
                 if LayerId.ORGANISMS in renderable_layers:
                     self.renderer.draw_overlays(
@@ -243,7 +252,7 @@ class App:
 
     def _status_lines(self) -> list[str]:
         """Build extra status text for the debug panel."""
-        lines = [f"FPS: {self.fps}"]
+        lines = [f"FPS: {self.fps}", f"Zoom: {self.cell_size}px"]
         lines.append(
             "Renderable: "
             + ",".join(layer_id.name for layer_id in self.layer_manager.get_renderable_layers())
@@ -342,8 +351,11 @@ class App:
 
     def _inspect_click(self, pixel_pos: tuple[int, int]) -> None:
         px, py = pixel_pos
-        gx = (px - self.renderer.grid_offset_x) // self.cell_size
-        gy = (py - self.renderer.grid_offset_y) // self.cell_size
+        if not self._point_in_board(px, py):
+            return
+
+        gx = (px - self.renderer.grid_offset_x) // self.renderer.cell_size
+        gy = (py - self.renderer.grid_offset_y) // self.renderer.cell_size
         if gx < 0 or gy < 0 or gx >= self.grid.width or gy >= self.grid.height:
             return
 
@@ -353,6 +365,31 @@ class App:
             None,
         )
         self.inspected_organism_id = clicked.organism_id if clicked else None
+
+    def _point_in_board(self, px: int, py: int) -> bool:
+        return 0 <= px < (WINDOW_WIDTH - PANEL_WIDTH) and 0 <= py < WINDOW_HEIGHT
+
+    def _pan_view(self, dx: int, dy: int) -> None:
+        self.grid_offset_x += dx
+        self.grid_offset_y += dy
+        self.renderer.set_view(self.cell_size, self.grid_offset_x, self.grid_offset_y)
+
+    def _zoom_view(self, zoom_steps: int, pivot_px: tuple[int, int]) -> None:
+        px, py = pivot_px
+        if not self._point_in_board(px, py):
+            return
+
+        old_size = self.cell_size
+        target_size = max(MIN_CELL_SIZE, min(MAX_CELL_SIZE, old_size + zoom_steps))
+        if target_size == old_size:
+            return
+
+        world_x = (px - self.grid_offset_x) / old_size
+        world_y = (py - self.grid_offset_y) / old_size
+        self.cell_size = target_size
+        self.grid_offset_x = int(round(px - world_x * target_size))
+        self.grid_offset_y = int(round(py - world_y * target_size))
+        self.renderer.set_view(self.cell_size, self.grid_offset_x, self.grid_offset_y)
 
     def _tile_debug_snapshot(self, x: int, y: int) -> dict[str, int]:
         layer_state = self.grid.get_layer_state()
