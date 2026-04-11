@@ -28,6 +28,7 @@ _FOOD_DIRECT_SCORE = 10.0    # Score when candidate IS a food cell
 _FOOD_INVERSE_SCORE = 1.0    # Numerator for 1/dist food attraction
 _TOXIC_DIRECT_PENALTY = 5.0  # Penalty when candidate is on a bad-zone cell
 _TOXIC_INVERSE_PENALTY = 0.5 # Numerator for 1/dist toxic repulsion
+_TOXIC_NUDGE_ALIGNMENT = 3.0 # Reward for moving opposite to remembered toxic threat
 
 # Default food search radius in cells around the organism centroid
 _DEFAULT_FOOD_SEARCH_RADIUS = 10
@@ -162,6 +163,11 @@ def _handle_toxic(
             if grid.get(nx, ny) == CellType.TOXIC:
                 org.bad_zones[(nx, ny)] = tick + memory_ticks
 
+    # Also sense toxic cells in a 1-cell outer contour around the organism bounds.
+    # This lets organisms react before direct contact and remember the threat briefly.
+    for pos in _outer_contour_toxic(grid, org):
+        org.bad_zones[pos] = tick + memory_ticks
+
 
 def _decay_bad_zones(org: Organism, tick: int, decay_tolerance: float) -> None:
     """Remove expired bad-zone entries."""
@@ -286,6 +292,17 @@ def _score_candidate(
         else:
             score -= (_TOXIC_INVERSE_PENALTY / dist) * resistance_factor
 
+    nudge_x, nudge_y = _toxic_nudge_vector(org)
+    if nudge_x != 0.0 or nudge_y != 0.0:
+        centroid_x, centroid_y = org.centroid()
+        cand_x = cx - centroid_x
+        cand_y = cy - centroid_y
+        cand_mag = (cand_x * cand_x + cand_y * cand_y) ** 0.5
+        nudge_mag = (nudge_x * nudge_x + nudge_y * nudge_y) ** 0.5
+        if cand_mag > 0.0 and nudge_mag > 0.0:
+            alignment = ((cand_x * nudge_x) + (cand_y * nudge_y)) / (cand_mag * nudge_mag)
+            score += _TOXIC_NUDGE_ALIGNMENT * alignment
+
     wall_density = local_env.get("wall_density", 0.0)
     toxin_density = local_env.get("toxin_density", 0.0)
     food_density = local_env.get("food_density", 0.0)
@@ -296,6 +313,51 @@ def _score_candidate(
     score -= wall_density * 0.25
 
     return score
+
+
+def _outer_contour_toxic(grid: Grid, org: Organism) -> set[tuple[int, int]]:
+    """Return toxic cells on the +1-cell contour outside the organism bounds."""
+    if not org.cells:
+        return set()
+    min_x, min_y, max_x, max_y = org.bounding_box()
+    left = max(0, min_x - 1)
+    right = min(grid.width - 1, max_x + 1)
+    top = max(0, min_y - 1)
+    bottom = min(grid.height - 1, max_y + 1)
+
+    contour: set[tuple[int, int]] = set()
+    for x in range(left, right + 1):
+        if grid.get(x, top) == CellType.TOXIC:
+            contour.add((x, top))
+        if grid.get(x, bottom) == CellType.TOXIC:
+            contour.add((x, bottom))
+
+    for y in range(top + 1, bottom):
+        if grid.get(left, y) == CellType.TOXIC:
+            contour.add((left, y))
+        if grid.get(right, y) == CellType.TOXIC:
+            contour.add((right, y))
+    return contour
+
+
+def _toxic_nudge_vector(org: Organism) -> tuple[float, float]:
+    """Compute repulsion vector (away from remembered toxic cells) from centroid."""
+    if not org.bad_zones:
+        return 0.0, 0.0
+    centroid_x, centroid_y = org.centroid()
+    sum_x = 0.0
+    sum_y = 0.0
+    for bad_x, bad_y in org.bad_zones:
+        away_x = centroid_x - bad_x
+        away_y = centroid_y - bad_y
+        dist = (away_x * away_x + away_y * away_y) ** 0.5
+        if dist <= 0.0:
+            continue
+        # Use a true unit-vector heading (centroid - toxic) so each toxic
+        # contributes a 180-degree "move away" direction.
+        sum_x += away_x / dist
+        sum_y += away_y / dist
+    return sum_x, sum_y
 
 
 def _nearby_food(
