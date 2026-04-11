@@ -152,3 +152,49 @@ def test_d3_food_conversion_is_logged() -> None:
     assert record.cause == D3_FOOD_CONVERSION
     assert record.phase == "D3"
     assert record.source_organism_id == organisms[0].organism_id
+
+
+def test_toxic_outer_contour_creates_avoidance_memory() -> None:
+    grid = Grid(12, 12)
+    for pos in [(5, 5), (5, 6), (6, 5), (6, 6)]:
+        grid.set(*pos, CellType.LIVE)
+    # Top contour (+1 above organism bbox) should be sensed as threat.
+    grid.set(5, 4, CellType.TOXIC)
+
+    organisms = detect_organisms(grid, tick=0, previous=[], rules=_rules())
+    d3_tick(grid, organisms, tick=0, rules=_rules(toxicMemoryTicks=5), rng=random.Random(0))
+
+    assert (5, 4) in organisms[0].bad_zones
+    assert organisms[0].bad_zones[(5, 4)] == 5
+
+
+def test_toxic_north_biases_guided_growth_southward() -> None:
+    grid = Grid(16, 16)
+    for pos in [(5, 5), (5, 6), (6, 5), (6, 6)]:
+        grid.set(*pos, CellType.LIVE)
+    # Toxic directly north of centroid on the +1 contour.
+    grid.set(5, 4, CellType.TOXIC)
+
+    rules = _rules(d3GuidanceWeight=1.0, foodScarcity=0.0, toxicMemoryTicks=10)
+    organisms = detect_organisms(grid, tick=0, previous=[], rules=rules)
+    organisms[0].gene.guidance_locus = 1.0
+    d3_tick(grid, organisms, tick=0, rules=rules, rng=random.Random(0))
+
+    # Expected nudge opposite the threat: a southern boundary cell becomes live.
+    assert grid.get(5, 7) == CellType.LIVE or grid.get(6, 7) == CellType.LIVE
+
+
+def test_toxic_east_biases_guided_growth_westward() -> None:
+    grid = Grid(16, 16)
+    for pos in [(5, 5), (5, 6), (6, 5), (6, 6)]:
+        grid.set(*pos, CellType.LIVE)
+    # Toxic on +1 contour to the east of centroid.
+    grid.set(7, 5, CellType.TOXIC)
+
+    rules = _rules(d3GuidanceWeight=1.0, foodScarcity=0.0, toxicMemoryTicks=10)
+    organisms = detect_organisms(grid, tick=0, previous=[], rules=rules)
+    organisms[0].gene.guidance_locus = 1.0
+    d3_tick(grid, organisms, tick=0, rules=rules, rng=random.Random(0))
+
+    # Expected nudge opposite the threat: a western boundary cell becomes live.
+    assert grid.get(4, 5) == CellType.LIVE or grid.get(4, 6) == CellType.LIVE
